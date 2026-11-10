@@ -6,9 +6,17 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 
 from app.db import SessionLocal, utcnow
-from app.models import Belt, BeltKind, FightMethod, PromoType, User, UserRole
-from app.schemas import FightCreateIn, FightCorrectIn, FightResultIn, PromoIn, TitleFightIn, TournamentIn
-from app.services import accounts, adjustments, fights, promos, title_fights, tournaments
+from app.models import Belt, BeltKind, FightMethod, PlannedFight, PromoType, User, UserRole
+from app.schemas import (
+    FightCreateIn,
+    FightCorrectIn,
+    FightResultIn,
+    PlannedFightIn,
+    PromoIn,
+    TitleFightIn,
+    TournamentIn,
+)
+from app.services import accounts, adjustments, fights, promos, title_fights, tournaments, upcoming
 
 DEMO_PASSWORD = "demo12345"
 
@@ -31,16 +39,67 @@ PLAYERS = [
 def seed_demo() -> int:
     db = SessionLocal()
     try:
-        logins = ["demo_owner", "demo_admin", "ten", *(login for login, _ in PLAYERS)]
-        if db.scalar(select(User.id).where(User.login.in_(logins))):
-            print("Демоданные уже загружены или логины заняты, ничего не изменено")
+        if db.scalar(select(User.id).where(User.login == "demo_owner")) is None:
+            logins = ["demo_admin", "ten", *(login for login, _ in PLAYERS)]
+            if db.scalar(select(User.id).where(User.login.in_(logins))):
+                print("Логины демо-аккаунтов заняты, ничего не изменено")
+                return 0
+            _fill(db)
+        if db.scalar(select(PlannedFight.id).limit(1)) is not None:
+            print("Демоданные уже загружены, ничего не изменено")
             return 0
-        _fill(db)
+        _fill_upcoming(db)
         print(f"Демоданные загружены. Пароль всех демо-аккаунтов: {DEMO_PASSWORD}")
         print("Владелец: demo_owner, админ: demo_admin, игроки: " + ", ".join(login for login, _ in PLAYERS))
         return 0
     finally:
         db.close()
+
+
+def _fill_upcoming(db) -> None:
+    """Предстоящие бои и голоса. Отдельно от основной части, чтобы дополнить уже загруженную базу."""
+    users = {user.login: user for user in db.scalars(select(User))}
+    now = utcnow()
+
+    def planned(first: str, second: str, days: int, for_first: list[str], for_second: list[str]) -> PlannedFight:
+        created = upcoming.create_planned_fight(
+            db,
+            users[first],
+            PlannedFightIn(
+                opponent_id=users[second].id,
+                scheduled_at=now + timedelta(days=days),
+                client_request_id=uuid.uuid4(),
+            ),
+        )
+        for login in for_first:
+            upcoming.cast_vote(db, users[login], "planned", created.id, users[first].id)
+        for login in for_second:
+            upcoming.cast_vote(db, users[login], "planned", created.id, users[second].id)
+        return created
+
+    planned("volk", "bars", 3, ["kraken", "tigr", "orlov"], ["sokol", "medved"])
+    planned("orlov", "yastreb", 5, ["lis"], ["gromov", "rys", "zubr"])
+
+    # Бой, который уже прошёл после голосования: голоса видны и в его карточке.
+    finished = planned("sokol", "gromov", 1, ["volk", "kraken", "bars", "lis"], ["tigr"])
+    fight = upcoming.submit_planned_result(
+        db,
+        users["sokol"],
+        finished.id,
+        FightResultIn(
+            fought_at=now - timedelta(hours=3), winner_id=users["gromov"].id, method=FightMethod.DECISION, round=3
+        ),
+    )
+    fights.confirm(db, users["gromov"], fight.id, 1)
+
+    voters = [users[login] for login, _ in PLAYERS]
+    for kind, target in upcoming.list_upcoming(db):
+        if kind == "planned":
+            continue
+        audience = [voter for voter in voters if voter.id not in (target.player1_id, target.player2_id)]
+        for index, voter in enumerate(audience[:6]):
+            choice = target.player1_id if index % 3 else target.player2_id
+            upcoming.cast_vote(db, voter, kind, target.id, choice)
 
 
 def _fill(db) -> None:
@@ -122,7 +181,9 @@ def _fill(db) -> None:
 
     def tournament(title, description, capacity, belt):
         created = tournaments.create_tournament(
-            db, admin, TournamentIn(title=title, description=description, capacity=capacity, belt_id=belt.id)
+            db,
+            admin,
+            TournamentIn(title=title, description=description, capacity=capacity, win_points=20, belt_id=belt.id),
         )
         return created
 

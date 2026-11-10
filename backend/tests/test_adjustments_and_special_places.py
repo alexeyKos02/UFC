@@ -157,12 +157,12 @@ def test_special_place_scenario_from_spec(admin, players):
     ladder(apis)
     assert admin.put(f"/admin/rating/special-places/{fourth.id}", {"place": 1}).status_code == 200
 
-    table = top.get("/players").json()
+    table = admin.get("/players").json()
     assert table[0]["player"]["id"] == fourth.id
     assert table[0]["display_place"] == 1
     assert table[0]["is_special"] is True
     assert table[0]["points_place"] == 4
-    assert fourth.profile()["rating"]["is_special"] is True
+    assert admin.get(f"/players/{fourth.id}").json()["rating"]["is_special"] is True
 
     top_before, fourth_before = top.points(), fourth.points()
     play(fourth, top, fourth)
@@ -175,23 +175,45 @@ def test_special_place_scenario_from_spec(admin, players):
     assert fourth.user["nickname"] in taken.json()["detail"]
 
     assert admin.delete(f"/admin/rating/special-places/{fourth.id}").status_code == 204
-    table = top.get("/players").json()
+    table = admin.get("/players").json()
     row = next(item for item in table if item["player"]["id"] == fourth.id)
     assert row["is_special"] is False
     assert row["display_place"] == row["points_place"]
 
 
-def test_remaining_groups_fill_free_numbers(admin, players):
+def test_special_place_marker_is_visible_only_to_staff(owner, admin, players):
+    pinned, other = players(2)
+    assert admin.put(f"/admin/rating/special-places/{pinned.id}", {"place": 1}).status_code == 200
+
+    def views(api):
+        row = next(item for item in api.get("/players").json() if item["player"]["id"] == pinned.id)
+        return row, api.get(f"/players/{pinned.id}").json()["rating"]
+
+    for player in (pinned, other):
+        row, rating = views(player)
+        assert row["display_place"] == 1
+        assert row["is_special"] is False
+        assert row["points_place"] is None
+        assert rating["display_place"] == 1
+        assert rating["is_special"] is False
+        assert rating["points_place"] is None
+
+    for staff in (admin, owner):
+        row, rating = views(staff)
+        assert row["is_special"] is True
+        assert row["points_place"] == 1
+        assert rating["is_special"] is True
+        assert rating["points_place"] == 1
+
+
+def test_remaining_players_fill_free_numbers(admin, players):
     first, second, third, fourth, fifth = players(5)
     play(first, second, first)
-    # Очки: first 102, third/fourth/fifth 100, second 98. Спецместо №2 у игрока second.
+    # Очки: first 102, admin/third/fourth/fifth 100, second 98. Спецместо №2 у игрока second.
     assert admin.put(f"/admin/rating/special-places/{second.id}", {"place": 2}).status_code == 200
     rows = {row["player"]["id"]: row for row in first.get("/players").json()}
-    assert rows[first.id]["display_place"] == 1
-    assert rows[second.id]["display_place"] == 2
-    assert rows[third.id]["display_place"] == 3
-    assert rows[fourth.id]["display_place"] == 3
-    assert rows[fifth.id]["display_place"] == 3
+    order = (first, second, admin, third, fourth, fifth)
+    assert [rows[api.id]["display_place"] for api in order] == [1, 2, 3, 4, 5, 6]
 
 
 def test_special_place_change_and_log(admin, players):
@@ -246,7 +268,7 @@ def test_blocked_holder_hidden_and_restored(owner, admin, players):
     assert third.user["nickname"] in number_still_held.json()["detail"]
 
     owner.post(f"/admin/users/{third.id}/unblock")
-    rows = first.get("/players").json()
+    rows = admin.get("/players").json()
     assert rows[0]["player"]["id"] == third.id
     assert rows[0]["is_special"] is True
 

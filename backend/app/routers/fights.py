@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query, status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, or_, select
 
 from app.deps import CurrentUser, Db
 from app.errors import forbidden, not_found
@@ -7,15 +7,24 @@ from app.models import (
     Fight,
     FightKind,
     FightStatus,
-    TitleFight,
-    TitleFightStatus,
     Tournament,
     TournamentMatch,
     TournamentStatus,
 )
-from app.schemas import FightCorrectIn, FightCreateIn, FightDisputeIn, FightVersionRef
-from app.serializers import fight_brief, fight_detail, match_out, title_fight_out
+from app.schemas import (
+    FightCorrectIn,
+    FightCreateIn,
+    FightDisputeIn,
+    FightResultIn,
+    FightVersionRef,
+    PlannedFightIn,
+    VoteIn,
+)
+from app.serializers import fight_brief, fight_detail, match_out, upcoming_out
 from app.services import fights as fight_service
+from app.services import upcoming as upcoming_service
+from app.services.stats import fight_comparison
+from app.services.upcoming import UpcomingKind
 
 router = APIRouter(prefix="/fights", tags=["fights"])
 
@@ -43,6 +52,31 @@ def create_fight(body: FightCreateIn, viewer: CurrentUser, db: Db) -> dict:
     return fight_detail(fight_service.create_regular_fight(db, viewer, body), viewer)
 
 
+@router.get("/upcoming")
+def upcoming_fights(viewer: CurrentUser, db: Db) -> list[dict]:
+    return [upcoming_out(kind, target, viewer) for kind, target in upcoming_service.list_upcoming(db)]
+
+
+@router.put("/upcoming/{kind}/{target_id}/vote", status_code=status.HTTP_204_NO_CONTENT)
+def vote(kind: UpcomingKind, target_id: int, body: VoteIn, viewer: CurrentUser, db: Db) -> None:
+    upcoming_service.cast_vote(db, viewer, kind, target_id, body.player_id)
+
+
+@router.post("/planned", status_code=status.HTTP_201_CREATED)
+def create_planned_fight(body: PlannedFightIn, viewer: CurrentUser, db: Db) -> dict:
+    return upcoming_out("planned", upcoming_service.create_planned_fight(db, viewer, body), viewer)
+
+
+@router.post("/planned/{planned_id}/result", status_code=status.HTTP_201_CREATED)
+def submit_planned_result(planned_id: int, body: FightResultIn, viewer: CurrentUser, db: Db) -> dict:
+    return fight_detail(upcoming_service.submit_planned_result(db, viewer, planned_id, body), viewer)
+
+
+@router.post("/planned/{planned_id}/cancel", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_planned_fight(planned_id: int, viewer: CurrentUser, db: Db) -> None:
+    upcoming_service.cancel_planned(db, viewer, planned_id)
+
+
 @router.get("/mine")
 def my_fights(viewer: CurrentUser, db: Db) -> dict:
     mine = or_(Fight.player1_id == viewer.id, Fight.player2_id == viewer.id)
@@ -60,27 +94,25 @@ def my_fights(viewer: CurrentUser, db: Db) -> dict:
         .where(
             Tournament.status == TournamentStatus.IN_PROGRESS,
             or_(TournamentMatch.player1_id == viewer.id, TournamentMatch.player2_id == viewer.id),
+            or_(TournamentMatch.player1_id.is_(None), TournamentMatch.player2_id.is_(None)),
             TournamentMatch.winner_id.is_(None),
             Fight.id.is_(None),
         )
         .order_by(TournamentMatch.tournament_id, TournamentMatch.round)
     ).all()
 
-    title_fights = db.scalars(
-        select(TitleFight).where(
-            and_(
-                TitleFight.status == TitleFightStatus.SCHEDULED,
-                or_(TitleFight.player1_id == viewer.id, TitleFight.player2_id == viewer.id),
-            )
-        )
-    ).all()
+    upcoming = [
+        upcoming_out(kind, target, viewer)
+        for kind, target in upcoming_service.list_upcoming(db)
+        if viewer.id in (target.player1_id, target.player2_id)
+    ]
 
     return {
         "to_confirm": [item for item in briefs if item["can_confirm"]],
         "waiting": [item for item in briefs if item["status"] == "pending" and not item["can_confirm"]],
         "disputed": [item for item in briefs if item["status"] == "disputed"],
         "matches": [match_out(match, viewer) for match in matches],
-        "title_fights": [title_fight_out(item, viewer) for item in title_fights],
+        "upcoming": upcoming,
     }
 
 
@@ -91,7 +123,7 @@ def get_fight(fight_id: int, viewer: CurrentUser, db: Db) -> dict:
         raise not_found("Бой не найден")
     if fight.status != FightStatus.CONFIRMED and not (fight.has_player(viewer.id) or viewer.is_staff):
         raise forbidden("Бой ещё не подтверждён, он виден только участникам")
-    return fight_detail(fight, viewer)
+    return {**fight_detail(fight, viewer), "comparison": fight_comparison(db, fight)}
 
 
 @router.post("/{fight_id}/confirm")

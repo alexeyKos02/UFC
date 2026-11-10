@@ -1,5 +1,7 @@
 """Преобразование моделей в ответы API."""
 
+from collections import Counter
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -117,6 +119,38 @@ def _adjustment_out(adjustment: RatingAdjustment | None) -> dict | None:
     }
 
 
+def _fighter_out(user: User) -> dict:
+    return {**player_brief(user), "full_body_url": image_url(user.full_body_path)}
+
+
+def _points_change(fight: Fight) -> list[int] | None:
+    """Итог очков за бой с учётом ручной корректировки, в порядке player1, player2."""
+    if not fight.rating_changes:
+        return None
+    adjustment = _adjustment_out(fight.adjustment)
+    totals: dict[int, int] = {}
+    for change in fight.rating_changes:
+        manual = 0
+        if adjustment:
+            manual = adjustment["winner_delta"] if change.player_id == fight.winner_id else adjustment["loser_delta"]
+        totals[change.player_id] = change.delta + manual
+    return [totals[fight.player1_id], totals[fight.player2_id]]
+
+
+def _votes_out(votes: list, first_id: int, second_id: int, viewer: User) -> dict:
+    counts = Counter(vote.voted_for_id for vote in votes)
+    my_vote = next((vote.voted_for_id for vote in votes if vote.voter_id == viewer.id), None)
+    return {"first": counts[first_id], "second": counts[second_id], "my_vote": my_vote}
+
+
+def _fight_votes(fight: Fight, viewer: User) -> dict | None:
+    """Голоса собираются до боя, поэтому лежат у его источника. У боя без него голосования не было."""
+    origin = fight.planned or fight.title_fight or fight.match
+    if origin is None:
+        return None
+    return _votes_out(origin.votes, fight.player1_id, fight.player2_id, viewer)
+
+
 def _version_out(version) -> dict:
     return {
         "version_no": version.version_no,
@@ -145,14 +179,16 @@ def fight_brief(fight: Fight, viewer: User) -> dict:
         "kind": fight.kind.value,
         "status": fight.status.value,
         "version_no": fight.current_version_no,
-        "player1": player_brief(fight.player1),
-        "player2": player_brief(fight.player2),
+        "player1": _fighter_out(fight.player1),
+        "player2": _fighter_out(fight.player2),
         "initiator_id": fight.initiator_id,
         "fought_at": fight.fought_at,
         "winner_id": fight.winner_id,
         "method": fight.method.value if fight.method else None,
         "round": fight.round_no,
         "confirmed_at": fight.confirmed_at,
+        "points_change": _points_change(fight),
+        "votes": _fight_votes(fight, viewer),
         "tournament": {"id": tournament.id, "title": tournament.title} if tournament else None,
         "title_fight_id": fight.title_fight_id,
         "can_confirm": awaits_viewer,
@@ -169,6 +205,7 @@ def _rating_change_out(change) -> dict:
         "points_before": change.points_before,
         "delta": change.delta,
         "points_after": change.points_after,
+        "place_after": change.place_after,
     }
 
 
@@ -182,28 +219,6 @@ def fight_detail(fight: Fight, viewer: User) -> dict:
     }
 
 
-def history_item(fight: Fight, player_id: int) -> dict:
-    change = next((c for c in fight.rating_changes if c.player_id == player_id), None)
-    adjustment = _adjustment_out(fight.adjustment)
-    manual = None
-    if adjustment:
-        manual = adjustment["winner_delta"] if fight.winner_id == player_id else adjustment["loser_delta"]
-    tournament = fight.match.tournament if fight.match else None
-    opponent = fight.loser if fight.winner_id == player_id else fight.winner
-    return {
-        "fight_id": fight.id,
-        "fought_at": fight.fought_at,
-        "opponent": player_brief(opponent),
-        "outcome": "win" if fight.winner_id == player_id else "loss",
-        "kind": fight.kind.value,
-        "method": fight.method.value if fight.method else None,
-        "round": fight.round_no,
-        "tournament": {"id": tournament.id, "title": tournament.title} if tournament else None,
-        "auto_delta": change.delta if change else None,
-        "manual_delta": manual,
-    }
-
-
 def stats_with_leaders(stats: dict) -> dict:
     return {
         **stats,
@@ -212,13 +227,16 @@ def stats_with_leaders(stats: dict) -> dict:
     }
 
 
-def rating_row_out(row: RatingRow) -> dict:
+def rating_row_out(row: RatingRow, viewer: User) -> dict:
+    # Спецместо видно только админу и владельцу. Место по очкам скрыто вместе с ним:
+    # по расхождению с номером в таблице закрепление легко вычислить.
     return {
         "player": player_brief(row.user),
         "points": row.user.rating_points,
-        "points_place": row.points_place,
+        "points_place": row.points_place if viewer.is_staff else None,
         "display_place": row.display_place,
-        "is_special": row.is_special,
+        "is_special": row.is_special if viewer.is_staff else False,
+        "is_champion": row.is_champion,
     }
 
 
@@ -253,6 +271,7 @@ def tournament_cards(db: Session, tournaments: list[Tournament], viewer: User) -
             "description": tournament.description,
             "status": tournament.status.value,
             "capacity": tournament.capacity,
+            "win_points": tournament.win_points,
             "seats_taken": seats.get(tournament.id, 0),
             "belt": belt_brief(tournament.belt),
             "winner": player_brief(tournament.winner),
@@ -305,6 +324,24 @@ def match_out(match: TournamentMatch, viewer: User) -> dict:
         "can_submit": is_player and state == "ready" and tournament.status == TournamentStatus.IN_PROGRESS,
         "tournament": {"id": tournament.id, "title": tournament.title},
         "round_name": round_name(match.round, tournament.rounds_count or match.round),
+    }
+
+
+def upcoming_out(kind: str, target, viewer: User) -> dict:
+    is_player = viewer.id in (target.player1_id, target.player2_id)
+    is_tournament = kind == "tournament"
+    return {
+        "kind": kind,
+        "id": target.id,
+        "player1": _fighter_out(target.player1),
+        "player2": _fighter_out(target.player2),
+        "scheduled_at": getattr(target, "scheduled_at", None),
+        "tournament": {"id": target.tournament.id, "title": target.tournament.title} if is_tournament else None,
+        "round_name": round_name(target.round, target.tournament.rounds_count or target.round) if is_tournament else None,
+        "votes": _votes_out(target.votes, target.player1_id, target.player2_id, viewer),
+        "can_vote": not is_player,
+        "can_submit": is_player,
+        "can_cancel": kind == "planned" and (is_player or viewer.is_staff),
     }
 
 

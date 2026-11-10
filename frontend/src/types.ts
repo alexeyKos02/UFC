@@ -1,4 +1,5 @@
 export type Role = 'player' | 'admin' | 'owner'
+export type RatingTier = 'top' | 'middle' | 'bottom'
 export type FightStatus = 'pending' | 'disputed' | 'confirmed' | 'cancelled'
 export type FightKind = 'regular' | 'tournament' | 'title'
 export type FightMethod = 'ko_tko' | 'submission' | 'decision'
@@ -28,6 +29,10 @@ export interface PlayerBrief {
   nickname: string
   avatar_url: string | null
   status: string
+}
+
+export interface Fighter extends PlayerBrief {
+  full_body_url: string | null
 }
 
 export interface BeltBrief {
@@ -66,19 +71,41 @@ export interface ProfileBelt {
   wins: BeltWin[]
 }
 
+export interface Votes {
+  first: number
+  second: number
+  my_vote: number | null
+}
+
+export interface UpcomingBout {
+  kind: 'planned' | 'title' | 'tournament'
+  id: number
+  player1: Fighter
+  player2: Fighter
+  scheduled_at: string | null
+  tournament: LinkRef | null
+  round_name: string | null
+  votes: Votes
+  can_vote: boolean
+  can_submit: boolean
+  can_cancel: boolean
+}
+
 export interface FightBrief {
   id: number
   kind: FightKind
   status: FightStatus
   version_no: number
-  player1: PlayerBrief
-  player2: PlayerBrief
+  player1: Fighter
+  player2: Fighter
   initiator_id: number
   fought_at: string
   winner_id: number
   method: FightMethod | null
   round: number | null
   confirmed_at: string | null
+  points_change: [number, number] | null
+  votes: Votes | null
   tournament: LinkRef | null
   title_fight_id: number | null
   can_confirm: boolean
@@ -107,6 +134,7 @@ export interface RatingChange {
   points_before: number
   delta: number
   points_after: number
+  place_after: number
 }
 
 export interface FightAdjustment {
@@ -121,6 +149,11 @@ export interface FightDetail extends FightBrief {
   rating_changes: RatingChange[]
   adjustment: FightAdjustment | null
   is_title_defense: boolean | null
+  comparison?: {
+    head_to_head: [number, number]
+    league_wins: [number, number]
+    league_losses: [number, number]
+  }
 }
 
 export interface ResultPayload {
@@ -136,6 +169,7 @@ export interface TournamentCard {
   description: string
   status: TournamentStatus
   capacity: number
+  win_points: number
   seats_taken: number
   belt: BeltBrief
   winner: PlayerBrief | null
@@ -214,15 +248,16 @@ export interface MyFights {
   waiting: FightBrief[]
   disputed: FightBrief[]
   matches: MatchOut[]
-  title_fights: TitleFight[]
+  upcoming: UpcomingBout[]
 }
 
 export interface LeagueRow {
   player: PlayerBrief
   points: number
-  points_place: number
-  display_place: number
+  points_place: number | null
+  display_place: number | null
   is_special: boolean
+  is_champion: boolean
   fights: number
   wins: number
   losses: number
@@ -241,6 +276,8 @@ export interface PlayerProfile {
     display_place: number | null
     points_place: number | null
     is_special: boolean
+    is_champion: boolean
+    tier: RatingTier | null
   }
   stats: {
     fights: number
@@ -255,25 +292,13 @@ export interface PlayerProfile {
   is_me: boolean
 }
 
-export interface HistoryItem {
-  fight_id: number
-  fought_at: string
-  opponent: PlayerBrief
-  outcome: 'win' | 'loss'
-  kind: FightKind
-  method: FightMethod | null
-  round: number | null
-  tournament: LinkRef | null
-  auto_delta: number | null
-  manual_delta: number | null
-}
-
 export interface AdminRatingRow {
   player: PlayerBrief
   points: number
   points_place: number
-  display_place: number
+  display_place: number | null
   is_special: boolean
+  is_champion: boolean
 }
 
 export interface AdminRating {

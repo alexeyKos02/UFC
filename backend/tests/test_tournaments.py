@@ -269,7 +269,7 @@ def test_belt_is_free_after_previous_tournament_cancelled(admin):
 def test_main_belt_cannot_be_used_for_tournament(admin):
     main = next(belt for belt in admin.get("/belts").json() if belt["kind"] == "main")
     response = admin.post(
-        "/admin/tournaments", {"title": "T", "capacity": 2, "belt_id": main["id"]}
+        "/admin/tournaments", {"title": "T", "capacity": 2, "win_points": 0, "belt_id": main["id"]}
     )
     assert response.status_code == 400
 
@@ -281,7 +281,7 @@ def test_capacity_cannot_drop_below_participants(admin, players):
         api.post(f"/tournaments/{tournament['id']}/join")
     response = admin.patch(
         f"/admin/tournaments/{tournament['id']}",
-        {"title": "T", "capacity": 2, "belt_id": tournament["belt"]["id"]},
+        {"title": "T", "capacity": 2, "win_points": 10, "belt_id": tournament["belt"]["id"]},
     )
     assert response.status_code == 409
 

@@ -6,14 +6,17 @@ import { currentUser } from '../auth'
 import FightResultForm from '../components/FightResultForm.vue'
 import StateBlock from '../components/StateBlock.vue'
 import { useAction, useLoad } from '../feedback'
-import { requestId } from '../format'
-import type { FightDetail, PlayerBrief, ResultPayload } from '../types'
+import { fromLocalInput, requestId, toLocalInput } from '../format'
+import type { FightDetail, PlayerBrief, ResultPayload, UpcomingBout } from '../types'
 
 const router = useRouter()
 const { data, error, loading } = useLoad(() => api.get<PlayerBrief[]>('/players/options'))
 const { busy, run } = useAction()
+const mode = ref<'played' | 'planned'>('played')
 const opponentId = ref<number | ''>('')
-// Один ключ на открытую форму: повторная отправка вернёт уже созданный бой.
+const scheduledAt = ref('')
+const earliest = toLocalInput(new Date())
+// Один ключ на открытую форму: повторная отправка вернёт уже созданную запись.
 const clientRequestId = requestId()
 
 const options = computed(() => (data.value ?? []).filter((player) => player.id !== currentUser.value?.id))
@@ -41,14 +44,37 @@ async function submit(payload: ResultPayload): Promise<void> {
   )
   if (fight) await router.push(`/fights/${fight.id}`)
 }
+
+async function plan(): Promise<void> {
+  const created = await run(
+    () =>
+      api.post<UpcomingBout>('/fights/planned', {
+        opponent_id: opponentId.value,
+        scheduled_at: fromLocalInput(scheduledAt.value),
+        client_request_id: clientRequestId,
+      }),
+    'Бой запланирован',
+  )
+  if (created) await router.push('/fights')
+}
 </script>
 
 <template>
   <main class="container page" style="max-width: 620px">
     <h1>Записать бой</h1>
-    <p class="muted">Запись создаётся после игры. Она попадёт в историю и рейтинг, когда её подтвердит соперник.</p>
+    <p class="muted">
+      {{
+        mode === 'played'
+          ? 'Запись попадёт в историю и рейтинг, когда её подтвердит соперник.'
+          : 'Бой появится в предстоящих, зрители смогут голосовать. Результат внесёте после игры.'
+      }}
+    </p>
     <StateBlock :loading="loading" :error="error">
       <section class="card stack">
+        <div class="choice-group" role="radiogroup" aria-label="Когда проходит бой">
+          <label class="choice"><input v-model="mode" type="radio" name="mode" value="played" /> Бой уже прошёл</label>
+          <label class="choice"><input v-model="mode" type="radio" name="mode" value="planned" /> Бой ещё не состоялся</label>
+        </div>
         <label class="field">
           Соперник
           <select v-model="opponentId">
@@ -56,7 +82,16 @@ async function submit(payload: ResultPayload): Promise<void> {
             <option v-for="player in options" :key="player.id" :value="player.id">{{ player.nickname }}</option>
           </select>
         </label>
-        <FightResultForm v-if="opponent && me" :key="opponent.id" :player1="me" :player2="opponent" :busy="busy" @submit="submit" />
+        <template v-if="opponent && me">
+          <FightResultForm v-if="mode === 'played'" :key="opponent.id" :player1="me" :player2="opponent" :busy="busy" @submit="submit" />
+          <form v-else class="stack" @submit.prevent="plan">
+            <label class="field">
+              Дата и время боя
+              <input v-model="scheduledAt" type="datetime-local" :min="earliest" required />
+            </label>
+            <button class="btn primary" type="submit" :disabled="busy">Запланировать бой</button>
+          </form>
+        </template>
       </section>
     </StateBlock>
   </main>

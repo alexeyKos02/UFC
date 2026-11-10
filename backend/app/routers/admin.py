@@ -151,11 +151,11 @@ def cancel_title_fight(title_fight_id: int, body: CancelIn, viewer: StaffUser, d
 
 
 @router.get("/rating")
-def admin_rating(db: Db) -> dict:
+def admin_rating(viewer: StaffUser, db: Db) -> dict:
     rows = rating.rating_table(db)
     specials = db.scalars(select(SpecialPlace).order_by(SpecialPlace.place)).all()
     return {
-        "rows": [rating_row_out(row) for row in rows],
+        "rows": [rating_row_out(row, viewer) for row in rows],
         "active_count": len(rows),
         "special_places": [
             {"place": item.place, "player": player_brief(item.user), "updated_at": item.updated_at}

@@ -18,6 +18,7 @@ FIELD_LABELS = {
     "name": "Название",
     "description": "Описание",
     "capacity": "Лимит участников",
+    "win_points": "Очки за победу",
     "fought_at": "Дата боя",
     "winner_id": "Победитель",
     "opponent_id": "Соперник",

@@ -80,6 +80,11 @@ class TitleFightStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class PlannedFightStatus(StrEnum):
+    SCHEDULED = "scheduled"
+    CANCELLED = "cancelled"
+
+
 class PromoType(StrEnum):
     TOURNAMENT = "tournament"
     FIGHT_ANNOUNCEMENT = "fight_announcement"
@@ -176,6 +181,7 @@ class Tournament(Base):
     __tablename__ = "tournaments"
     __table_args__ = (
         CheckConstraint("capacity >= 2", name="capacity_min"),
+        CheckConstraint("win_points >= 0", name="win_points_non_negative"),
         Index(
             "uq_tournaments_active_belt",
             "belt_id",
@@ -188,6 +194,7 @@ class Tournament(Base):
     title: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     capacity: Mapped[int] = mapped_column(Integer)
+    win_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     belt_id: Mapped[int] = mapped_column(ForeignKey("belts.id"), index=True)
     status: Mapped[TournamentStatus] = mapped_column(
         enum_type(TournamentStatus, "tournament_status"), default=TournamentStatus.DRAFT, index=True
@@ -250,6 +257,7 @@ class TournamentMatch(Base):
     player2: Mapped[User | None] = relationship(foreign_keys=[player2_id])
     winner: Mapped[User | None] = relationship(foreign_keys=[winner_id])
     fight: Mapped["Fight | None"] = relationship(back_populates="match", uselist=False)
+    votes: Mapped[list["FightVote"]] = relationship()
 
 
 class TitleFight(Base):
@@ -283,6 +291,35 @@ class TitleFight(Base):
     champion: Mapped[User | None] = relationship(foreign_keys=[champion_id])
     winner: Mapped[User | None] = relationship(foreign_keys=[winner_id])
     fight: Mapped["Fight | None"] = relationship(back_populates="title_fight", uselist=False)
+    votes: Mapped[list["FightVote"]] = relationship()
+
+
+class PlannedFight(Base):
+    """Обычный бой, заявленный до игры. Результат потом создаёт связанную запись Fight."""
+
+    __tablename__ = "planned_fights"
+    __table_args__ = (
+        CheckConstraint("player1_id <> player2_id", name="different_players"),
+        UniqueConstraint("created_by_id", "client_request_id", name="uq_planned_fights_creator_request"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    player1_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    player2_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[PlannedFightStatus] = mapped_column(
+        enum_type(PlannedFightStatus, "planned_fight_status"), default=PlannedFightStatus.SCHEDULED, index=True
+    )
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    client_request_id: Mapped[str] = mapped_column(String(36))
+    cancelled_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = created_at_column()
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    player1: Mapped[User] = relationship(foreign_keys=[player1_id])
+    player2: Mapped[User] = relationship(foreign_keys=[player2_id])
+    fight: Mapped["Fight | None"] = relationship(back_populates="planned", uselist=False)
+    votes: Mapped[list["FightVote"]] = relationship()
 
 
 class Fight(Base):
@@ -313,6 +350,7 @@ class Fight(Base):
     round_no: Mapped[int | None] = mapped_column(Integer)
     tournament_match_id: Mapped[int | None] = mapped_column(ForeignKey("tournament_matches.id"), unique=True)
     title_fight_id: Mapped[int | None] = mapped_column(ForeignKey("title_fights.id"), unique=True)
+    planned_fight_id: Mapped[int | None] = mapped_column(ForeignKey("planned_fights.id"), unique=True)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
@@ -331,6 +369,7 @@ class Fight(Base):
     adjustment: Mapped["RatingAdjustment | None"] = relationship(back_populates="fight", uselist=False)
     match: Mapped[TournamentMatch | None] = relationship(back_populates="fight")
     title_fight: Mapped[TitleFight | None] = relationship(back_populates="fight")
+    planned: Mapped[PlannedFight | None] = relationship(back_populates="fight")
 
     @property
     def current_version(self) -> "FightVersion":
@@ -395,6 +434,7 @@ class RatingChange(Base):
     points_before: Mapped[int] = mapped_column(Integer)
     delta: Mapped[int] = mapped_column(Integer)
     points_after: Mapped[int] = mapped_column(Integer)
+    place_after: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = created_at_column()
 
     fight: Mapped[Fight] = relationship(back_populates="rating_changes")
@@ -494,6 +534,27 @@ class BeltWin(Base):
     fight: Mapped[Fight] = relationship()
     tournament: Mapped[Tournament | None] = relationship()
     title_fight: Mapped[TitleFight | None] = relationship()
+
+
+class FightVote(Base):
+    """Голос зрителя за победу бойца. Привязан к бою до результата, поэтому виден и после него."""
+
+    __tablename__ = "fight_votes"
+    __table_args__ = (
+        UniqueConstraint("voter_id", "planned_fight_id", name="uq_fight_votes_planned"),
+        UniqueConstraint("voter_id", "title_fight_id", name="uq_fight_votes_title"),
+        UniqueConstraint("voter_id", "tournament_match_id", name="uq_fight_votes_match"),
+        CheckConstraint("num_nonnulls(planned_fight_id, title_fight_id, tournament_match_id) = 1", name="single_target"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    voter_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    voted_for_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    planned_fight_id: Mapped[int | None] = mapped_column(ForeignKey("planned_fights.id"), index=True)
+    title_fight_id: Mapped[int | None] = mapped_column(ForeignKey("title_fights.id"), index=True)
+    tournament_match_id: Mapped[int | None] = mapped_column(ForeignKey("tournament_matches.id"), index=True)
+    created_at: Mapped[datetime] = created_at_column()
+    updated_at: Mapped[datetime] = updated_at_column()
 
 
 class Promo(Base):

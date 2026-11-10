@@ -49,6 +49,7 @@ function slots(match: MatchOut): (PlayerBrief | null)[] {
               <StatusBadge :tournament="data.status" />
               <RouterLink class="link small" :to="`/belts/${data.belt.id}`">За пояс «{{ data.belt.name }}»</RouterLink>
               <span class="small muted">Мест занято: {{ seatsLine(data) }}</span>
+              <span v-if="data.win_points" class="small muted">Очки за победу: +{{ data.win_points }}</span>
             </div>
           </div>
         </div>

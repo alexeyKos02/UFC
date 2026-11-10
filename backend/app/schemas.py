@@ -38,6 +38,16 @@ class FightCreateIn(FightResultIn):
     client_request_id: UUID
 
 
+class PlannedFightIn(BaseModel):
+    opponent_id: int
+    scheduled_at: AwareDatetime
+    client_request_id: UUID
+
+
+class VoteIn(BaseModel):
+    player_id: int
+
+
 class FightVersionRef(BaseModel):
     version_no: int
 
@@ -54,6 +64,7 @@ class TournamentIn(BaseModel):
     title: Title
     description: Description = ""
     capacity: int = Field(ge=2, le=128)
+    win_points: int = Field(ge=0, le=100_000)
     belt_id: int
 
 

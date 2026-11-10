@@ -31,6 +31,8 @@ def _load_upset_fight(db: Session, fight_id: int) -> Fight:
         change.player_id: change
         for change in db.scalars(select(RatingChange).where(RatingChange.fight_id == fight.id))
     }
+    if fight.winner_id not in changes:
+        raise conflict("За этот бой очки не начислялись, корректировать нечего")
     if not is_upset(changes[fight.winner_id].place_before, changes[fight.loser_id].place_before):
         raise conflict("Победитель не был ниже соперника на 3 места или больше")
     return fight

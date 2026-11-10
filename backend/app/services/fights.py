@@ -85,15 +85,17 @@ def confirm(db: Session, actor: User, fight_id: int, version_no: int) -> Fight:
 
 
 def _finalize(db: Session, fight: Fight) -> None:
-    players = db.scalars(
-        select(User)
-        .where(User.id.in_([fight.player1_id, fight.player2_id]))
-        .order_by(User.id)
-        .with_for_update(key_share=True)
-        .execution_options(populate_existing=True)
-    ).all()
-    by_id = {player.id: player for player in players}
-    rating.apply_fight_rating(db, fight, by_id[fight.winner_id], by_id[fight.loser_id])
+    # Бои турнира на очки не влияют: очки даёт только победа в самом турнире.
+    if fight.kind != FightKind.TOURNAMENT:
+        players = db.scalars(
+            select(User)
+            .where(User.id.in_([fight.player1_id, fight.player2_id]))
+            .order_by(User.id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        ).all()
+        by_id = {player.id: player for player in players}
+        rating.apply_fight_rating(db, fight, by_id[fight.winner_id], by_id[fight.loser_id])
     fight.status = FightStatus.CONFIRMED
     fight.confirmed_at = utcnow()
     db.flush()

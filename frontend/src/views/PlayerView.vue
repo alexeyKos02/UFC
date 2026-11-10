@@ -4,16 +4,21 @@ import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import { setAccount } from '../auth'
 import BeltIcon from '../components/BeltIcon.vue'
-import PlayerAvatar from '../components/PlayerAvatar.vue'
+import ChampionMark from '../components/ChampionMark.vue'
+import FightCard from '../components/FightCard.vue'
 import PlayerChip from '../components/PlayerChip.vue'
 import StateBlock from '../components/StateBlock.vue'
+import WinLossBar from '../components/WinLossBar.vue'
 import { useAction, useLoad } from '../feedback'
-import { fightKindLabel, formatDate, formatDateTime, resultLine, signed } from '../format'
-import type { Account, HistoryItem, PlayerProfile } from '../types'
+import { formatDate, tierLabel } from '../format'
+import type { Account, FightBrief, PlayerProfile } from '../types'
+
+const HISTORY_PAGE = 10
 
 const props = defineProps<{ id: string }>()
 const { data, error, loading, reload } = useLoad(() => api.get<PlayerProfile>(`/players/${props.id}`))
-const history = useLoad(() => api.get<HistoryItem[]>(`/players/${props.id}/fights`))
+const history = useLoad(() => api.get<FightBrief[]>(`/players/${props.id}/fights`))
+const visibleFights = ref(HISTORY_PAGE)
 const { busy, run } = useAction()
 
 const nickname = ref('')
@@ -47,7 +52,8 @@ async function upload(event: Event, path: string): Promise<void> {
     <StateBlock :loading="loading" :error="error">
       <template v-if="data">
         <div class="profile-top">
-          <div>
+          <div class="photo-wrap">
+            <span v-if="data.rating.is_champion" class="photo-crown"><ChampionMark :size="26" /></span>
             <img v-if="data.player.full_body_url" class="full-body" :src="data.player.full_body_url" :alt="`${data.player.nickname} в полный рост`" />
             <svg v-else class="full-body" viewBox="0 0 120 200" role="img" aria-label="Фото в полный рост не загружено">
               <rect width="120" height="200" fill="#17191e" />
@@ -59,30 +65,26 @@ async function upload(event: Event, path: string): Promise<void> {
           </div>
 
           <div class="stack" style="gap: 16px">
-            <div class="row" style="gap: 14px">
-              <PlayerAvatar :url="data.player.avatar_url" :size="72" :alt="data.player.nickname" />
-              <div class="stack" style="gap: 4px">
-                <h1>{{ data.player.nickname }}</h1>
-                <span v-if="data.player.status === 'blocked'" class="badge tone-red">Заблокирован</span>
-              </div>
+            <div class="row">
+              <h1>{{ data.player.nickname }}</h1>
+              <span v-if="data.rating.tier" class="tier-tag" :class="`tier-${data.rating.tier}`">{{ tierLabel[data.rating.tier] }}</span>
+              <span v-if="data.player.status === 'blocked'" class="badge tone-red">Заблокирован</span>
             </div>
 
             <div class="tiles">
-              <div class="tile">
+              <div v-if="!data.rating.is_champion" class="tile">
                 <b>{{ data.rating.display_place === null ? '—' : `№${data.rating.display_place}` }}</b>
                 <span>Место<template v-if="data.rating.is_special"> · Спецместо</template></span>
               </div>
               <div class="tile"><b>{{ data.rating.points }}</b><span>Очки</span></div>
-              <div class="tile"><b>{{ data.stats.fights }}</b><span>Бои</span></div>
-              <div class="tile"><b>{{ data.stats.wins }}</b><span>Победы</span></div>
-              <div class="tile"><b>{{ data.stats.losses }}</b><span>Поражения</span></div>
-              <div class="tile"><b>{{ data.stats.win_rate === null ? '—' : `${data.stats.win_rate}%` }}</b><span>Процент побед</span></div>
               <div class="tile"><b>{{ data.stats.best_streak }}</b><span>Лучшая серия</span></div>
             </div>
 
+            <WinLossBar :wins="data.stats.wins" :losses="data.stats.losses" :win-rate="data.stats.win_rate" />
+
             <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr))">
               <div class="card stack">
-                <h3>Злейший враг</h3>
+                <h3>Хозяин</h3>
                 <div v-for="item in data.stats.nemeses" :key="item.player.id" class="row between">
                   <PlayerChip :player="item.player" />
                   <span class="small muted">Поражений: {{ item.count }}</span>
@@ -90,7 +92,7 @@ async function upload(event: Event, path: string): Promise<void> {
                 <p v-if="!data.stats.nemeses.length" class="small muted">Поражений пока не было</p>
               </div>
               <div class="card stack">
-                <h3>Кого чаще всего побеждал</h3>
+                <h3>Владеет</h3>
                 <div v-for="item in data.stats.victims" :key="item.player.id" class="row between">
                   <PlayerChip :player="item.player" />
                   <span class="small muted">Побед: {{ item.count }}</span>
@@ -122,9 +124,9 @@ async function upload(event: Event, path: string): Promise<void> {
           </div>
         </section>
 
-        <section class="section">
+        <section v-if="data.belts.active.length" class="section">
           <h2>Активные пояса</h2>
-          <div v-if="data.belts.active.length" class="grid">
+          <div class="grid">
             <div v-for="item in data.belts.active" :key="item.belt.id" class="card belt-row">
               <BeltIcon :belt="item.belt" :size="56" />
               <div class="stack" style="gap: 4px; min-width: 0">
@@ -140,12 +142,11 @@ async function upload(event: Event, path: string): Promise<void> {
               </div>
             </div>
           </div>
-          <p v-else class="empty">Активных поясов нет.</p>
         </section>
 
-        <section class="section">
+        <section v-if="data.belts.past.length" class="section">
           <h2>Прошлые пояса</h2>
-          <div v-if="data.belts.past.length" class="grid">
+          <div class="grid">
             <div v-for="item in data.belts.past" :key="item.belt.id" class="card belt-row">
               <BeltIcon :belt="item.belt" past :size="56" />
               <div class="stack" style="gap: 4px; min-width: 0">
@@ -160,50 +161,22 @@ async function upload(event: Event, path: string): Promise<void> {
               </div>
             </div>
           </div>
-          <p v-else class="empty">Прошлых поясов нет.</p>
         </section>
 
         <section class="section">
           <h2>История боёв</h2>
-          <div v-if="history.data.value?.length" class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Дата</th>
-                  <th>Соперник</th>
-                  <th>Исход</th>
-                  <th class="hide-sm">Тип</th>
-                  <th class="hide-sm">Способ</th>
-                  <th class="num">Очки</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in history.data.value" :key="item.fight_id">
-                  <td class="small"><RouterLink class="link" :to="`/fights/${item.fight_id}`">{{ formatDateTime(item.fought_at) }}</RouterLink></td>
-                  <td>
-                    <PlayerChip :player="item.opponent" :size="24" />
-                    <div class="show-sm small muted">
-                      {{ fightKindLabel[item.kind] }}<template v-if="resultLine(item.method, item.round)"> · {{ resultLine(item.method, item.round) }}</template>
-                      <template v-if="item.tournament"> · <RouterLink class="link" :to="`/tournaments/${item.tournament.id}`">{{ item.tournament.title }}</RouterLink></template>
-                    </div>
-                  </td>
-                  <td>
-                    <span class="badge" :class="item.outcome === 'win' ? 'tone-green' : 'tone-red'">{{ item.outcome === 'win' ? 'Победа' : 'Поражение' }}</span>
-                  </td>
-                  <td class="hide-sm small">
-                    {{ fightKindLabel[item.kind] }}
-                    <RouterLink v-if="item.tournament" class="link" :to="`/tournaments/${item.tournament.id}`">{{ item.tournament.title }}</RouterLink>
-                  </td>
-                  <td class="hide-sm small">{{ resultLine(item.method, item.round) || '—' }}</td>
-                  <td class="num">
-                    <span :class="(item.auto_delta ?? 0) > 0 ? 'delta-up' : 'delta-down'">{{ signed(item.auto_delta ?? 0) }}</span>
-                    <span v-if="item.manual_delta" class="small muted"> ({{ signed(item.manual_delta) }} вручную)</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-if="history.data.value?.length" class="stack" style="gap: 16px">
+            <FightCard v-for="fight in history.data.value.slice(0, visibleFights)" :key="fight.id" :fight="fight" hide-points />
           </div>
-          <p v-else class="empty">Подтверждённых боёв пока нет.</p>
+          <p v-else-if="!history.loading.value" class="empty">Подтверждённых боёв пока нет.</p>
+          <button
+            v-if="(history.data.value?.length ?? 0) > visibleFights"
+            class="btn"
+            style="align-self: center"
+            @click="visibleFights += HISTORY_PAGE"
+          >
+            Показать ещё
+          </button>
         </section>
       </template>
     </StateBlock>

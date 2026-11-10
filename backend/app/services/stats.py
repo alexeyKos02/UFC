@@ -30,6 +30,26 @@ def league_stats(db: Session) -> dict[int, dict]:
 EMPTY_STATS = {"fights": 0, "wins": 0, "losses": 0, "win_rate": None}
 
 
+def fight_comparison(db: Session, fight: Fight) -> dict:
+    """Сравнение участников для раскрытой карточки: значения идут в порядке player1, player2."""
+    league = league_stats(db)
+    first = league.get(fight.player1_id, EMPTY_STATS)
+    second = league.get(fight.player2_id, EMPTY_STATS)
+    pair = (fight.player1_id, fight.player2_id)
+    head_to_head = dict(
+        db.execute(
+            select(Fight.winner_id, func.count())
+            .where(Fight.status == FightStatus.CONFIRMED, Fight.winner_id.in_(pair), Fight.loser_id.in_(pair))
+            .group_by(Fight.winner_id)
+        ).all()
+    )
+    return {
+        "head_to_head": [head_to_head.get(fight.player1_id, 0), head_to_head.get(fight.player2_id, 0)],
+        "league_wins": [first["wins"], second["wins"]],
+        "league_losses": [first["losses"], second["losses"]],
+    }
+
+
 def confirmed_fights_of(db: Session, user_id: int) -> list[Fight]:
     return list(
         db.scalars(

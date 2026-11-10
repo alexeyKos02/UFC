@@ -14,7 +14,7 @@ const belts = useLoad(() => api.get<Belt[]>('/belts'))
 const { busy, run } = useAction()
 
 const tournamentBelts = computed(() => (belts.data.value ?? []).filter((belt) => belt.kind === 'tournament'))
-const emptyForm = { title: '', description: '', capacity: 8, belt_id: 0 }
+const emptyForm = { title: '', description: '', capacity: 8, win_points: 10, belt_id: 0 }
 const form = reactive({ ...emptyForm })
 const editingId = ref<number | null>(null)
 const cancelling = ref<TournamentCard | null>(null)
@@ -26,6 +26,7 @@ function edit(item: TournamentCard): void {
     title: item.title,
     description: item.description,
     capacity: item.capacity,
+    win_points: item.win_points,
     belt_id: item.belt.id,
   })
   window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -74,6 +75,7 @@ async function cancel(): Promise<void> {
       <div class="field-grid">
         <label class="field">Название<input v-model="form.title" required maxlength="120" /></label>
         <label class="field">Лимит участников<input v-model.number="form.capacity" type="number" min="2" max="128" required /></label>
+        <label class="field">Очки за победу в турнире<input v-model.number="form.win_points" type="number" min="0" max="100000" step="1" required /></label>
         <label class="field">
           Турнирный пояс
           <select v-model.number="form.belt_id" required>
@@ -94,7 +96,7 @@ async function cancel(): Promise<void> {
     <div v-if="list.data.value?.length" class="table-wrap">
       <table>
         <thead>
-          <tr><th>Турнир</th><th>Статус</th><th class="hide-sm">Пояс</th><th class="num">Места</th><th>Действия</th></tr>
+          <tr><th>Турнир</th><th>Статус</th><th class="hide-sm">Пояс</th><th class="num">Места</th><th class="num hide-sm">Очки</th><th>Действия</th></tr>
         </thead>
         <tbody>
           <tr v-for="item in list.data.value" :key="item.id">
@@ -102,6 +104,7 @@ async function cancel(): Promise<void> {
             <td><StatusBadge :tournament="item.status" /></td>
             <td class="hide-sm small">{{ item.belt.name }}</td>
             <td class="num small">{{ seatsLine(item) }}</td>
+            <td class="num small hide-sm">+{{ item.win_points }}</td>
             <td>
               <div class="row" style="gap: 6px">
                 <button v-if="item.status === 'draft'" class="btn sm primary" :disabled="busy" @click="act(item, 'publish', 'Регистрация открыта')">Открыть регистрацию</button>

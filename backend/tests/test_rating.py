@@ -1,9 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 
-from app.services.rating import auto_delta
+from app.services.rating import auto_delta, break_tie
 from tests.conftest import FIGHT_TIME, confirm, create_fight, ladder, play
 
 
@@ -27,14 +28,76 @@ def table_of(api) -> dict[int, dict]:
     return {row["player"]["id"]: row for row in api.get("/players").json()}
 
 
-def test_equal_points_share_place_without_gaps(players):
+def display_order(api) -> list[int]:
+    return [row["player"]["id"] for row in api.get("/players").json()]
+
+
+def test_equal_points_get_own_numbers_but_share_points_place(admin, players):
     first, second, third, fourth = players(4)
     play(first, second, first)
-    table = table_of(first)
-    assert table[first.id]["display_place"] == 1
-    assert table[third.id]["display_place"] == 2
-    assert table[fourth.id]["display_place"] == 2
-    assert table[second.id]["display_place"] == 3
+    # Очки: first 102, admin, third и fourth по 100, second 98.
+    table = table_of(admin)
+    order = (first, admin, third, fourth, second)
+    assert [table[api.id]["display_place"] for api in order] == [1, 2, 3, 4, 5]
+    assert [table[api.id]["points_place"] for api in order] == [1, 2, 2, 2, 3]
+
+
+def test_head_to_head_beats_alphabet_at_equal_points(players):
+    first, second, third = players(3)
+    play(second, first, second)
+    play(first, third, first)
+    play(first, third, first)
+    assert first.points() == second.points()
+    assert display_order(first) == [second.id, first.id, third.id]
+
+
+@pytest.mark.parametrize(
+    ("better", "worse"),
+    [("ko_tko", "submission"), ("submission", "decision"), ("decision", None)],
+)
+def test_stronger_win_method_ranks_higher_when_head_to_head_is_even(players, better, worse):
+    first, second = players(2)
+    confirm(first, create_fight(second, first, second, method=better).json())
+    confirm(second, create_fight(first, second, first, method=worse).json())
+    assert first.points() == second.points()
+    assert display_order(first) == [second.id, first.id]
+
+
+def test_alphabet_is_the_last_tiebreak(players):
+    first, second, third = players(3)
+    for api, nickname in ((first, "Яна"), (second, "Борис"), (third, "Ёжик")):
+        assert api.patch("/me/profile", {"nickname": nickname}).status_code == 200
+    assert display_order(first) == [second.id, third.id, first.id]
+
+
+def test_three_way_cycle_is_decided_by_win_methods(players):
+    first, second, third = players(3)
+    confirm(second, create_fight(first, second, first, method="decision").json())
+    confirm(third, create_fight(second, third, second, method="ko_tko").json())
+    confirm(first, create_fight(third, first, third, method="submission").json())
+    assert len({api.points() for api in (first, second, third)}) == 1
+    assert display_order(first) == [second.id, third.id, first.id]
+
+
+def test_tie_is_recounted_inside_remaining_group():
+    leader = SimpleNamespace(id=1, nickname="Я")
+    middle_winner = SimpleNamespace(id=2, nickname="Б")
+    middle_loser = SimpleNamespace(id=3, nickname="А")
+    last = SimpleNamespace(id=4, nickname="В")
+    fights = [
+        (leader.id, middle_winner.id, None),
+        (middle_winner.id, middle_loser.id, None),
+        (middle_loser.id, last.id, None),
+    ]
+    players = [middle_loser, last, middle_winner, leader]
+    assert break_tie(players, fights) == [leader, middle_winner, middle_loser, last]
+
+
+def test_fights_with_players_outside_the_tie_are_ignored():
+    first = SimpleNamespace(id=1, nickname="Б")
+    second = SimpleNamespace(id=2, nickname="А")
+    outsider_id = 3
+    assert break_tie([first, second], [(first.id, outsider_id, None)]) == [second, first]
 
 
 def test_upset_when_lower_by_three_places(players):

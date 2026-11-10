@@ -195,16 +195,17 @@ def test_empty_statistics(players):
     assert stats["victims"] == []
 
 
-def test_history_row_shows_outcome_and_points(players):
-    first, second = players(2)
-    fight = play(first, second, first)
+def test_profile_history_lists_player_fights_newest_first(players):
+    first, second, third = players(3)
+    older = play(first, second, first, FIGHT_TIME)
+    newer = play(second, first, second, FIGHT_TIME + timedelta(hours=1))
+    play(second, third, second, FIGHT_TIME + timedelta(hours=2))
     rows = first.get(f"/players/{first.id}/fights").json()
-    assert rows[0]["fight_id"] == fight["id"]
-    assert rows[0]["outcome"] == "win"
-    assert rows[0]["kind"] == "regular"
-    assert rows[0]["auto_delta"] == 2
-    assert rows[0]["opponent"]["id"] == second.id
-    assert second.get(f"/players/{second.id}/fights").json()[0]["auto_delta"] == -2
+    assert [row["id"] for row in rows] == [newer["id"], older["id"]]
+    assert rows[1]["winner_id"] == first.id
+    assert rows[1]["kind"] == "regular"
+    assert rows[1]["points_change"] == [2, -2]
+    assert rows[1]["player2"]["id"] == second.id
 
 
 def test_future_tolerance_allows_now(players):

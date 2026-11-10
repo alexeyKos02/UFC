@@ -190,11 +190,19 @@ def new_belt(staff: Api, name: str = "Пояс новичков") -> dict:
     return response.json()
 
 
-def new_tournament(staff: Api, capacity: int = 8, belt: dict | None = None, publish: bool = True) -> dict:
+def new_tournament(
+    staff: Api, capacity: int = 8, belt: dict | None = None, publish: bool = True, win_points: int = 10
+) -> dict:
     belt = belt or new_belt(staff, f"Пояс {uuid.uuid4().hex[:6]}")
     response = staff.post(
         "/admin/tournaments",
-        {"title": "Кубок лиги", "description": "Тест", "capacity": capacity, "belt_id": belt["id"]},
+        {
+            "title": "Кубок лиги",
+            "description": "Тест",
+            "capacity": capacity,
+            "win_points": win_points,
+            "belt_id": belt["id"],
+        },
     )
     assert response.status_code == 201, response.text
     tournament = response.json()

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onUnmounted, ref, watch } from 'vue'
 import { api } from '../api'
+import ChampionMark from '../components/ChampionMark.vue'
 import PlayerChip from '../components/PlayerChip.vue'
 import StateBlock from '../components/StateBlock.vue'
 import { useLoad } from '../feedback'
@@ -45,7 +46,10 @@ onUnmounted(() => window.clearTimeout(timer))
           </thead>
           <tbody>
             <tr v-for="row in data" :key="row.player.id">
-              <td class="num"><span class="place">№{{ row.display_place }}</span></td>
+              <td class="num">
+                <ChampionMark v-if="row.is_champion" />
+                <span v-else class="place">№{{ row.display_place }}</span>
+              </td>
               <td>
                 <div class="row" style="gap: 6px">
                   <PlayerChip :player="row.player" />

@@ -100,7 +100,8 @@ def test_vacant_main_belt_title_fight(admin, players):
 
     assert first.points() == 100
     assert first.profile()["belts"]["active"] == []
-    my_card = first.get("/fights/mine").json()["title_fights"][0]
+    my_card = first.get("/fights/mine").json()["upcoming"][0]
+    assert my_card["kind"] == "title"
     assert my_card["id"] == title_fight["id"]
     assert my_card["can_submit"] is True
 
@@ -189,7 +190,7 @@ def test_cancel_closes_card_for_result_and_confirmation(admin, players):
     assert cancelled.json()["status"] == "cancelled"
     assert confirm(second, submitted).status_code == 409
     assert first.post(f"/title-fights/{title_fight['id']}/result", result_body(first.id)).status_code == 409
-    assert first.get("/fights/mine").json()["title_fights"] == []
+    assert first.get("/fights/mine").json()["upcoming"] == []
     assert first.points() == 100
     assert main_belt(admin)["champion"] is None
 

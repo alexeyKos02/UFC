@@ -4,11 +4,18 @@ import type {
   FightStatus,
   MatchState,
   PromoType,
+  RatingTier,
   Role,
   TitleFightStatus,
   TournamentCard,
   TournamentStatus,
 } from './types'
+
+export const tierLabel: Record<RatingTier, string> = {
+  top: 'Топ',
+  middle: 'Ни бе ни ме',
+  bottom: 'Играть научись',
+}
 
 export const fightStatusLabel: Record<FightStatus, string> = {
   pending: 'Ждёт подтверждения',
@@ -17,10 +24,10 @@ export const fightStatusLabel: Record<FightStatus, string> = {
   cancelled: 'Отменён',
 }
 
-export const fightKindLabel: Record<FightKind, string> = {
-  regular: 'Обычный',
-  tournament: 'Турнирный',
-  title: 'Титульный',
+export const boutCaption: Record<FightKind, string> = {
+  regular: 'Обычный бой',
+  tournament: 'Турнирный бой',
+  title: 'Титульный бой',
 }
 
 export const methodLabel: Record<FightMethod, string> = {
@@ -77,6 +84,19 @@ const dateOnly = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long
 
 export function formatDateTime(value: string | null): string {
   return value ? dateTime.format(new Date(value)) : '—'
+}
+
+const numericDateTime = new Intl.DateTimeFormat('ru-RU', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+/** Короткая дата для заглавных подписей в карточке боя. */
+export function formatBoutDate(value: string): string {
+  return numericDateTime.format(new Date(value))
 }
 
 export function formatDate(value: string | null): string {

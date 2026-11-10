@@ -68,6 +68,7 @@ def create_fight_record(
     client_request_id: str | None = None,
     tournament_match_id: int | None = None,
     title_fight_id: int | None = None,
+    planned_fight_id: int | None = None,
 ) -> Fight:
     validate_result(data, player1_id, player2_id)
     ensure_players_active(db, [player1_id, player2_id])
@@ -80,6 +81,7 @@ def create_fight_record(
         current_version_no=1,
         tournament_match_id=tournament_match_id,
         title_fight_id=title_fight_id,
+        planned_fight_id=planned_fight_id,
     )
     apply_version_fields(fight, data)
     db.add(fight)

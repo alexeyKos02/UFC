@@ -49,6 +49,7 @@ function open(): void {
       <div>
         <h3><RouterLink :to="`/tournaments/${tournament.id}`">{{ tournament.title }}</RouterLink></h3>
         <p class="small muted">За пояс «{{ tournament.belt.name }}»</p>
+        <p v-if="tournament.win_points" class="small muted">Очки за победу: +{{ tournament.win_points }}</p>
       </div>
     </div>
     <div v-if="tournament.status === 'registration'" class="seats" aria-hidden="true">

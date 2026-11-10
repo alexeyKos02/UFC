@@ -53,6 +53,7 @@ def create_tournament(db: Session, actor: User, data: TournamentIn) -> Tournamen
         title=data.title,
         description=data.description,
         capacity=data.capacity,
+        win_points=data.win_points,
         belt_id=data.belt_id,
         created_by_id=actor.id,
     )
@@ -82,6 +83,10 @@ def update_tournament(db: Session, tournament_id: int, data: TournamentIn) -> To
         _check_belt(db, data.belt_id)
         tournament.capacity = data.capacity
         tournament.belt_id = data.belt_id
+    if data.win_points != tournament.win_points:
+        if tournament.status in (TournamentStatus.FINISHED, TournamentStatus.CANCELLED):
+            raise conflict("После завершения турнира нельзя менять очки за победу")
+        tournament.win_points = data.win_points
     try:
         db.commit()
     except IntegrityError:
@@ -273,6 +278,12 @@ def on_fight_confirmed(db: Session, fight: Fight) -> None:
         tournament.winner_id = fight.winner_id
         tournament.finished_at = utcnow()
         belts.award(db, tournament.belt_id, fight, tournament_id=tournament.id)
+        # Вызов идёт под замком рейтинга, который взяло финальное подтверждение.
+        db.execute(
+            update(User)
+            .where(User.id == fight.winner_id)
+            .values(rating_points=User.rating_points + tournament.win_points)
+        )
     else:
         next_match = db.scalar(
             select(TournamentMatch)

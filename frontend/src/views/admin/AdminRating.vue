@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../../api'
+import ChampionMark from '../../components/ChampionMark.vue'
 import Modal from '../../components/Modal.vue'
 import PlayerChip from '../../components/PlayerChip.vue'
 import StateBlock from '../../components/StateBlock.vue'
@@ -21,6 +22,8 @@ watch(rating.data, (value) => {
   const pinned = new Map(value.special_places.map((item) => [item.player.id, item.place]))
   for (const row of value.rows) places[row.player.id] = pinned.get(row.player.id) ?? ''
 })
+
+const pinnedIds = computed(() => new Set(rating.data.value?.special_places.map((item) => item.player.id)))
 
 const blockedHolders = computed(() => {
   if (!rating.data.value) return []
@@ -101,7 +104,7 @@ const placeActionLabel = { set: 'Назначено', change: 'Изменено'
   <section class="section">
     <h2>Спецместа</h2>
     <StateBlock :loading="rating.loading.value" :error="rating.error.value">
-      <p class="small muted">Спецместо влияет только на отображение. Очки и апсеты считаются по месту по очкам. Активных игроков: {{ rating.data.value?.active_count }}.</p>
+      <p class="small muted">Спецместо влияет только на отображение. Очки и апсеты считаются по месту по очкам. Чемпион основного пояса стоит над таблицей без номера, его спецместо начнёт действовать после потери пояса. Активных игроков: {{ rating.data.value?.active_count }}.</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -109,7 +112,10 @@ const placeActionLabel = { set: 'Назначено', change: 'Изменено'
           </thead>
           <tbody>
             <tr v-for="row in rating.data.value?.rows" :key="row.player.id">
-              <td class="num"><span class="place">№{{ row.display_place }}</span></td>
+              <td class="num">
+                <ChampionMark v-if="row.is_champion" />
+                <span v-else class="place">№{{ row.display_place }}</span>
+              </td>
               <td class="num">№{{ row.points_place }}</td>
               <td>
                 <div class="row" style="gap: 6px">
@@ -121,8 +127,8 @@ const placeActionLabel = { set: 'Назначено', change: 'Изменено'
               <td>
                 <form class="row" style="gap: 6px; flex-wrap: nowrap" @submit.prevent="setPlace(row.player.id)">
                   <input v-model.number="places[row.player.id]" class="inline-input" type="number" min="1" :max="rating.data.value?.active_count" required :aria-label="`Спецместо игрока ${row.player.nickname}`" />
-                  <button class="btn sm" type="submit" :disabled="busy">{{ row.is_special ? 'Изменить' : 'Закрепить' }}</button>
-                  <button v-if="row.is_special" class="btn sm danger" type="button" :disabled="busy" @click="clearPlace(row.player.id)">Снять</button>
+                  <button class="btn sm" type="submit" :disabled="busy">{{ pinnedIds.has(row.player.id) ? 'Изменить' : 'Закрепить' }}</button>
+                  <button v-if="pinnedIds.has(row.player.id)" class="btn sm danger" type="button" :disabled="busy" @click="clearPlace(row.player.id)">Снять</button>
                 </form>
               </td>
             </tr>

@@ -7,7 +7,7 @@ from app.models import User, UserStatus
 from app.schemas import ProfileIn
 from app.serializers import (
     account_out,
-    history_item,
+    fight_brief,
     image_url,
     player_belts,
     player_brief,
@@ -20,14 +20,14 @@ router = APIRouter(tags=["players"])
 
 
 @router.get("/players")
-def league(_: CurrentUser, db: Db, q: str | None = None) -> list[dict]:
+def league(viewer: CurrentUser, db: Db, q: str | None = None) -> list[dict]:
     query = (q or "").strip().lower()
     league_stats = stats.league_stats(db)
     result = []
     for row in rating.rating_table(db):
         if query and query not in row.user.nickname.lower():
             continue
-        result.append({**rating_row_out(row), **league_stats.get(row.user.id, stats.EMPTY_STATS)})
+        result.append({**rating_row_out(row, viewer), **league_stats.get(row.user.id, stats.EMPTY_STATS)})
     return result
 
 
@@ -52,8 +52,10 @@ def player_profile(player_id: int, viewer: CurrentUser, db: Db) -> dict:
         "rating": {
             "points": user.rating_points,
             "display_place": row.display_place if row else None,
-            "points_place": row.points_place if row else None,
-            "is_special": row.is_special if row else False,
+            "points_place": row.points_place if row and viewer.is_staff else None,
+            "is_special": row.is_special if row and viewer.is_staff else False,
+            "is_champion": row.is_champion if row else False,
+            "tier": rating.rating_tier(row),
         },
         "stats": stats_with_leaders(stats.player_stats(db, user.id)),
         "belts": player_belts(db, user),
@@ -62,11 +64,11 @@ def player_profile(player_id: int, viewer: CurrentUser, db: Db) -> dict:
 
 
 @router.get("/players/{player_id}/fights")
-def player_fights(player_id: int, _: CurrentUser, db: Db) -> list[dict]:
+def player_fights(player_id: int, viewer: CurrentUser, db: Db) -> list[dict]:
     if db.get(User, player_id) is None:
         raise not_found("Игрок не найден")
     fights = stats.confirmed_fights_of(db, player_id)
-    return [history_item(fight, player_id) for fight in reversed(fights)]
+    return [fight_brief(fight, viewer) for fight in reversed(fights)]
 
 
 @router.patch("/me/profile")
