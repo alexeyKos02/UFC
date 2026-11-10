@@ -1,0 +1,140 @@
+import type {
+  FightKind,
+  FightMethod,
+  FightStatus,
+  MatchState,
+  PromoType,
+  Role,
+  TitleFightStatus,
+  TournamentCard,
+  TournamentStatus,
+} from './types'
+
+export const fightStatusLabel: Record<FightStatus, string> = {
+  pending: 'Ждёт подтверждения',
+  disputed: 'Оспорен',
+  confirmed: 'Подтверждён',
+  cancelled: 'Отменён',
+}
+
+export const fightKindLabel: Record<FightKind, string> = {
+  regular: 'Обычный',
+  tournament: 'Турнирный',
+  title: 'Титульный',
+}
+
+export const methodLabel: Record<FightMethod, string> = {
+  ko_tko: 'KO/TKO',
+  submission: 'Сабмишен',
+  decision: 'Решение',
+}
+
+export const tournamentStatusLabel: Record<TournamentStatus, string> = {
+  draft: 'Черновик',
+  registration: 'Регистрация открыта',
+  in_progress: 'Идёт',
+  finished: 'Завершён',
+  cancelled: 'Отменён',
+}
+
+export const matchStateLabel: Record<MatchState, string> = {
+  bye: 'Проход без соперника',
+  completed: 'Завершён',
+  ready: 'Ждёт результата',
+  waiting_players: 'Ждёт соперников',
+  pending: 'Ждёт подтверждения',
+  disputed: 'Оспорен',
+  confirmed: 'Завершён',
+  cancelled: 'Отменён',
+}
+
+export const titleStatusLabel: Record<TitleFightStatus, string> = {
+  scheduled: 'Назначен',
+  completed: 'Завершён',
+  cancelled: 'Отменён',
+}
+
+export const promoTypeLabel: Record<PromoType, string> = {
+  tournament: 'Турнир',
+  fight_announcement: 'Анонс боя',
+  fighter_of_week: 'Боец недели',
+}
+
+export const roleLabel: Record<Role, string> = {
+  player: 'Игрок',
+  admin: 'Админ',
+  owner: 'Владелец',
+}
+
+const dateTime = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+const dateOnly = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+
+export function formatDateTime(value: string | null): string {
+  return value ? dateTime.format(new Date(value)) : '—'
+}
+
+export function formatDate(value: string | null): string {
+  return value ? dateOnly.format(new Date(value)) : '—'
+}
+
+/** Значение для input[type=datetime-local] в часовом поясе браузера. */
+export function toLocalInput(value: string | Date): string {
+  const date = new Date(value)
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+export function fromLocalInput(value: string): string {
+  return new Date(value).toISOString()
+}
+
+export function signed(value: number): string {
+  if (value > 0) return `+${value}`
+  return value < 0 ? `−${Math.abs(value)}` : '0'
+}
+
+export function resultLine(method: FightMethod | null, round: number | null): string {
+  const parts: string[] = []
+  if (method) parts.push(methodLabel[method])
+  if (round) parts.push(`${round} раунд`)
+  return parts.join(', ')
+}
+
+export function seatsLine(tournament: TournamentCard): string {
+  return `${tournament.seats_taken} из ${tournament.capacity}`
+}
+
+export function isFull(tournament: TournamentCard): boolean {
+  return tournament.seats_taken >= tournament.capacity
+}
+
+export function tournamentCta(tournament: TournamentCard): string {
+  switch (tournament.status) {
+    case 'registration':
+      if (tournament.is_participant) return 'Вы участвуете'
+      return isFull(tournament) ? 'Мест нет' : 'Вступить'
+    case 'in_progress':
+      return 'Смотреть сетку'
+    case 'finished':
+      return 'Итоги турнира'
+    case 'cancelled':
+      return 'Турнир отменён'
+    default:
+      return 'Подробнее'
+  }
+}
+
+/** crypto.randomUUID есть только на HTTPS и localhost, а лига может работать по обычному HTTP. */
+export function requestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
