@@ -1,0 +1,69 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Тесты и сборка
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Настройки окружения
+        run: cp .env.example .env
+
+      - name: Тесты бэкенда
+        run: docker compose --profile test run --rm --build tests
+
+      - name: Миграции соответствуют моделям
+        run: docker compose --profile test run --rm tests sh -c 'export DATABASE_URL="$TEST_DATABASE_URL"; alembic check'
+
+      - name: Сборка фронтенда (vue-tsc + vite)
+        run: docker compose build frontend
+
+      - name: Остановить контейнеры
+        if: always()
+        run: docker compose --profile test down -v
+
+  deploy:
+    name: Выкладка на сервер
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: SSH-ключ
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # На сервере ключ привязан к deploy/server-deploy.sh, команда — это хеш коммита.
+      - name: Выкладка
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o IdentitiesOnly=yes "root@$DEPLOY_HOST" "$GITHUB_SHA"
+
+      - name: Удалить ключ
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
