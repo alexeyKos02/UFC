@@ -187,7 +187,7 @@ function period(promo: Promo): string {
     </form>
   </section>
 
-  <StateBlock :loading="list.loading.value" :error="list.error.value">
+  <StateBlock :loading="list.loading.value" :error="list.error.value" skeleton="list">
     <div v-if="list.data.value?.length" class="stack">
       <article v-for="promo in list.data.value" :key="promo.id" class="card stack">
         <div class="row between">

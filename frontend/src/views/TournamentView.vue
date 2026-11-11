@@ -39,7 +39,7 @@ function slots(match: MatchOut): (PlayerBrief | null)[] {
 
 <template>
   <main class="container page">
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="list">
       <template v-if="data">
         <div class="belt-row">
           <BeltIcon :belt="data.belt" :size="64" />

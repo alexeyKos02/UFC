@@ -14,7 +14,7 @@ const { data, error, loading } = useLoad(() => api.get<BeltDetail>(`/belts/${pro
 
 <template>
   <main class="container page">
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="table">
       <template v-if="data">
         <div class="belt-row">
           <BeltIcon :belt="data" :size="72" />

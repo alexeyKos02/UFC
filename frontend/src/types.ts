@@ -296,6 +296,29 @@ export interface PlayerProfile {
   }
   belts: { active: ProfileBelt[]; past: ProfileBelt[] }
   is_me: boolean
+  /** Очные встречи зрителя с этим игроком; на своей странице null. */
+  head_to_head: HeadToHead | null
+}
+
+export type MethodKey = FightMethod | 'none'
+
+export interface HeadToHead {
+  fights: number
+  my_wins: number
+  their_wins: number
+  methods: { mine: Partial<Record<MethodKey, number>>; theirs: Partial<Record<MethodKey, number>> }
+  /** Текущая серия побед подряд в очных встречах: чья и сколько. */
+  streak: { mine: boolean; count: number } | null
+  /** Сколько очков рейтинга зритель выиграл (плюс) или отдал (минус) в этих боях. */
+  points: number
+  recent: {
+    fight_id: number
+    fought_at: string
+    won: boolean
+    method: FightMethod | null
+    round: number | null
+    kind: FightKind
+  }[]
 }
 
 export interface AdminRatingRow {
@@ -351,3 +374,6 @@ export interface SpecialPlaceLogRow {
   actor: PlayerBrief
   created_at: string
 }
+
+/** Вид заготовки, которую показывает StateBlock во время загрузки. */
+export type SkeletonKind = 'table' | 'league' | 'cards' | 'list' | 'profile' | 'fight' | 'form'

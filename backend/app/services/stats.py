@@ -3,7 +3,7 @@ from collections import Counter
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import Fight, FightStatus, User
+from app.models import AdjustmentStatus, Fight, FightStatus, RatingAdjustment, RatingChange, User
 
 
 def _win_rate(wins: int, total: int) -> float | None:
@@ -92,4 +92,66 @@ def player_stats(db: Session, user_id: int) -> dict:
         "best_streak": best_streak,
         "nemeses": _leaders(db, lost_to),
         "victims": _leaders(db, beaten),
+    }
+
+
+RECENT_HEAD_TO_HEAD = 5
+
+
+def head_to_head(db: Session, me_id: int, rival_id: int) -> dict:
+    """Очные встречи зрителя (me) с игроком на странице профиля (rival): всё с точки зрения зрителя."""
+    pair = (me_id, rival_id)
+    fights = list(
+        db.scalars(
+            select(Fight)
+            .where(Fight.status == FightStatus.CONFIRMED, Fight.winner_id.in_(pair), Fight.loser_id.in_(pair))
+            .order_by(Fight.fought_at, Fight.id)
+        )
+    )
+    methods = {side: Counter() for side in ("mine", "theirs")}
+    my_wins = 0
+    streak_owner: int | None = None
+    streak = 0
+    for fight in fights:
+        mine = fight.winner_id == me_id
+        my_wins += mine
+        methods["mine" if mine else "theirs"][fight.method.value if fight.method else "none"] += 1
+        streak = streak + 1 if streak_owner == fight.winner_id else 1
+        streak_owner = fight.winner_id
+
+    # Сколько очков рейтинга зритель выиграл (или отдал) в этих боях: автоначисления плюс ручные корректировки.
+    fight_ids = [fight.id for fight in fights]
+    points = 0
+    if fight_ids:
+        points += db.scalar(
+            select(func.coalesce(func.sum(RatingChange.delta), 0)).where(
+                RatingChange.fight_id.in_(fight_ids), RatingChange.player_id == me_id
+            )
+        )
+        for fight_id, winner_delta in db.execute(
+            select(RatingAdjustment.fight_id, RatingAdjustment.winner_delta).where(
+                RatingAdjustment.fight_id.in_(fight_ids), RatingAdjustment.status == AdjustmentStatus.ACTIVE
+            )
+        ):
+            winner_id = next(fight.winner_id for fight in fights if fight.id == fight_id)
+            points += winner_delta if winner_id == me_id else -winner_delta
+
+    return {
+        "fights": len(fights),
+        "my_wins": my_wins,
+        "their_wins": len(fights) - my_wins,
+        "methods": {side: dict(counter) for side, counter in methods.items()},
+        "streak": {"mine": streak_owner == me_id, "count": streak} if fights else None,
+        "points": points,
+        "recent": [
+            {
+                "fight_id": fight.id,
+                "fought_at": fight.fought_at,
+                "won": fight.winner_id == me_id,
+                "method": fight.method.value if fight.method else None,
+                "round": fight.round_no,
+                "kind": fight.kind.value,
+            }
+            for fight in reversed(fights[-RECENT_HEAD_TO_HEAD:])
+        ],
     }

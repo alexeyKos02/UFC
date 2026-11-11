@@ -22,7 +22,7 @@ const { data, error, loading, reload } = useLoad(() => api.get<MyFights>('/fight
         <RouterLink class="btn primary" to="/fights/new">Записать бой</RouterLink>
       </div>
     </div>
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="list">
       <template v-if="data">
         <section class="section" data-tour="to-confirm">
           <h2>На подтверждение</h2>

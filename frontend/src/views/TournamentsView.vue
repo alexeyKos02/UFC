@@ -11,7 +11,7 @@ const { data, error, loading, reload } = useLoad(() => api.get<TournamentCard[]>
 <template>
   <main class="container page">
     <h1>Турниры</h1>
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="cards">
       <div v-if="data?.length" class="grid">
         <TournamentTile v-for="item in data" :key="item.id" :tournament="item" @changed="reload" />
       </div>

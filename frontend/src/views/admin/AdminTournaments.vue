@@ -92,7 +92,7 @@ async function cancel(): Promise<void> {
     </form>
   </section>
 
-  <StateBlock :loading="list.loading.value" :error="list.error.value">
+  <StateBlock :loading="list.loading.value" :error="list.error.value" skeleton="table">
     <div v-if="list.data.value?.length" class="table-wrap">
       <table>
         <thead>

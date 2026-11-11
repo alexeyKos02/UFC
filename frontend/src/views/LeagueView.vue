@@ -36,7 +36,7 @@ const rows = computed(() => (champion.value ? data.value?.filter((row) => row !=
         <input v-model="search" type="search" placeholder="Поиск по нику" />
       </label>
     </div>
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="league">
       <div v-if="data?.length" class="league-board">
         <section v-if="champion && champion.belt" class="champion-poster" aria-label="Чемпион лиги" data-tour="league-champion">
           <RouterLink class="poster-photo" :to="`/players/${champion.player.id}`" tabindex="-1" aria-hidden="true">

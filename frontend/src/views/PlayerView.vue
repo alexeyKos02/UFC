@@ -6,7 +6,9 @@ import { setAccount } from '../auth'
 import BeltIcon from '../components/BeltIcon.vue'
 import ChampionMark from '../components/ChampionMark.vue'
 import FightCard from '../components/FightCard.vue'
+import HeadToHead from '../components/HeadToHead.vue'
 import PlayerChip from '../components/PlayerChip.vue'
+import SkeletonBlock from '../components/SkeletonBlock.vue'
 import StateBlock from '../components/StateBlock.vue'
 import WinLossBar from '../components/WinLossBar.vue'
 import { useAction, useLoad } from '../feedback'
@@ -49,7 +51,7 @@ async function upload(event: Event, path: string): Promise<void> {
 
 <template>
   <main class="container page">
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="profile">
       <template v-if="data">
         <div class="profile-top">
           <div class="photo-wrap">
@@ -81,6 +83,8 @@ async function upload(event: Event, path: string): Promise<void> {
             </div>
 
             <WinLossBar :wins="data.stats.wins" :losses="data.stats.losses" :win-rate="data.stats.win_rate" />
+
+            <HeadToHead v-if="data.head_to_head" :h2h="data.head_to_head" :rival="data.player" />
 
             <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr))">
               <div class="card stack">
@@ -168,7 +172,8 @@ async function upload(event: Event, path: string): Promise<void> {
           <div v-if="history.data.value?.length" class="stack" style="gap: 16px">
             <FightCard v-for="fight in history.data.value.slice(0, visibleFights)" :key="fight.id" :fight="fight" hide-points />
           </div>
-          <p v-else-if="!history.loading.value" class="empty">Подтверждённых боёв пока нет.</p>
+          <SkeletonBlock v-else-if="history.loading.value" kind="list" :count="2" />
+          <p v-else class="empty">Подтверждённых боёв пока нет.</p>
           <button
             v-if="(history.data.value?.length ?? 0) > visibleFights"
             class="btn"

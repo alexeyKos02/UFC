@@ -66,7 +66,7 @@ async function uploadIcon(event: Event, belt: Belt): Promise<void> {
       <button class="btn primary" type="submit" :disabled="busy">Создать</button>
     </form>
   </section>
-  <StateBlock :loading="list.loading.value" :error="list.error.value">
+  <StateBlock :loading="list.loading.value" :error="list.error.value" skeleton="cards">
     <div class="grid">
       <article v-for="belt in list.data.value" :key="belt.id" class="card stack">
         <div class="row between">

@@ -16,7 +16,7 @@ const { data, error, loading, reload } = useLoad(() => api.get<HomeData>('/home'
       <h1>Главная</h1>
       <RouterLink class="btn primary" to="/fights/new">Записать бой</RouterLink>
     </div>
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="cards">
       <template v-if="data">
         <section v-if="data.promos.length" class="section" aria-label="Промо">
           <div class="grid">

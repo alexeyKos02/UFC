@@ -103,7 +103,7 @@ const placeActionLabel = { set: 'Назначено', change: 'Изменено'
 <template>
   <section class="section">
     <h2>Спецместа</h2>
-    <StateBlock :loading="rating.loading.value" :error="rating.error.value">
+    <StateBlock :loading="rating.loading.value" :error="rating.error.value" skeleton="table">
       <p class="small muted">Спецместо влияет только на отображение. Очки за бой считаются по Elo из очков обоих игроков, апсеты — по месту по очкам. Чемпион основного пояса стоит над таблицей без номера, его спецместо начнёт действовать после потери пояса. Активных игроков: {{ rating.data.value?.active_count }}.</p>
       <div class="table-wrap">
         <table>
@@ -148,7 +148,7 @@ const placeActionLabel = { set: 'Назначено', change: 'Изменено'
   <section class="section">
     <h2>Ручная корректировка за апсет</h2>
     <p class="small muted">В списке только подтверждённые бои, где победитель был ниже соперника на 3 места или больше.</p>
-    <StateBlock :loading="upsets.loading.value" :error="upsets.error.value">
+    <StateBlock :loading="upsets.loading.value" :error="upsets.error.value" skeleton="table">
       <div v-if="upsets.data.value?.length" class="table-wrap">
         <table>
           <thead>

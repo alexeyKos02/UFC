@@ -11,7 +11,7 @@ const { data, error, loading, reload } = useLoad(() => api.get<FightDetail>(`/fi
 
 <template>
   <main class="container page">
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="fight">
       <template v-if="data">
         <h1 class="sr-hidden">Бой #{{ data.id }}</h1>
         <FightExpanded :fight="data" @changed="reload" />

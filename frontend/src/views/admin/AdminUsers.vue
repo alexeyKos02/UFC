@@ -43,7 +43,7 @@ async function toggleBlock(user: AdminUser): Promise<void> {
 
 <template>
   <input v-model="search" type="search" placeholder="Поиск по нику или логину" aria-label="Поиск по нику или логину" style="max-width: 320px" />
-  <StateBlock :loading="list.loading.value" :error="list.error.value">
+  <StateBlock :loading="list.loading.value" :error="list.error.value" skeleton="table">
     <div class="table-wrap">
       <table>
         <thead>

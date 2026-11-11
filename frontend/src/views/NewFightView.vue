@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import { currentUser } from '../auth'
 import FightResultForm from '../components/FightResultForm.vue'
@@ -10,10 +10,12 @@ import { fromLocalInput, requestId, toLocalInput } from '../format'
 import type { FightDetail, PlayerBrief, ResultPayload, UpcomingBout } from '../types'
 
 const router = useRouter()
+const route = useRoute()
 const { data, error, loading } = useLoad(() => api.get<PlayerBrief[]>('/players/options'))
 const { busy, run } = useAction()
 const mode = ref<'played' | 'planned'>('played')
-const opponentId = ref<number | ''>('')
+// Ссылка «Записать бой» со страницы бойца передаёт соперника в ?opponent=.
+const opponentId = ref<number | ''>(Number(route.query.opponent) || '')
 const scheduledAt = ref('')
 const earliest = toLocalInput(new Date())
 // Один ключ на открытую форму: повторная отправка вернёт уже созданную запись.
@@ -69,7 +71,7 @@ async function plan(): Promise<void> {
           : 'Бой появится в предстоящих, зрители смогут голосовать. Результат внесёте после игры.'
       }}
     </p>
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="form">
       <section class="card stack">
         <div class="choice-group" role="radiogroup" aria-label="Когда проходит бой" data-tour="fight-mode">
           <label class="choice"><input v-model="mode" type="radio" name="mode" value="played" /> Бой уже прошёл</label>

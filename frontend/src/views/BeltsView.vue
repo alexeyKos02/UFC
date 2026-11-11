@@ -13,7 +13,7 @@ const { data, error, loading } = useLoad(() => api.get<Belt[]>('/belts'))
 <template>
   <main class="container page">
     <h1>Пояса лиги</h1>
-    <StateBlock :loading="loading" :error="error">
+    <StateBlock :loading="loading" :error="error" skeleton="cards">
       <div class="grid">
         <article v-for="belt in data" :key="belt.id" class="card belt-row">
           <BeltIcon :belt="belt" :size="56" />

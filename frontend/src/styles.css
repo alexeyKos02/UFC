@@ -551,6 +551,223 @@ th {
   white-space: nowrap;
 }
 
+/* Скелетоны: серые заготовки вместо «Загрузка…» */
+.sk {
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes sk-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    animation: none;
+  }
+}
+
+.sk-line {
+  height: 12px;
+}
+
+.sk-title {
+  height: 26px;
+}
+
+.sk-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.sk-num {
+  flex: none;
+  width: 36px;
+  height: 14px;
+}
+
+.sk-figure {
+  flex: none;
+  width: 72px;
+  height: 120px;
+}
+
+.sk-figure.tall {
+  width: 96px;
+  height: 180px;
+}
+
+.sk-photo {
+  width: 100%;
+  max-width: 240px;
+  height: 360px;
+  margin: 0 auto;
+}
+
+.sk-poster {
+  height: clamp(220px, 34vw, 300px);
+  margin-bottom: 12px;
+  border-radius: var(--radius);
+}
+
+.sk-table {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.sk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sk-row:first-child {
+  border-top: 0;
+}
+
+.sk-row .sk-line {
+  flex: 0 1 auto;
+}
+
+.sk-row .sk-num:last-child {
+  margin-left: auto;
+}
+
+/* Очные встречи на странице бойца */
+.h2h {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.h2h h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.h2h-score {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.h2h-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.h2h-side.right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.h2h-rival {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.h2h-numbers {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 600 40px/1 var(--heading);
+  color: var(--text-3);
+}
+
+.h2h-numbers b {
+  color: var(--text-2);
+}
+
+.h2h-numbers b.lead {
+  color: var(--text);
+}
+
+.h2h-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--corner-blue);
+  overflow: hidden;
+}
+
+.h2h-bar span {
+  display: block;
+  height: 100%;
+  background: var(--red);
+}
+
+.h2h-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 10px;
+}
+
+.h2h-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.tone-plus {
+  color: var(--green);
+}
+
+.tone-minus {
+  color: #ff8a9a;
+}
+
+.h2h-methods {
+  font-size: 14px;
+}
+
+.h2h-methods th,
+.h2h-methods td {
+  padding: 6px 8px;
+}
+
+.h2h-methods th:last-child {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.h2h-recent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.h2h-date {
+  margin-left: auto;
+}
+
+.h2h-recent:hover {
+  background: var(--surface-2);
+}
+
 /* Таблица рейтинга с афишей чемпиона: одна карточка, таблица продолжает афишу. */
 .league-board {
   border: 1px solid var(--border);

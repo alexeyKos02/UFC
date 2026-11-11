@@ -67,6 +67,7 @@ def player_profile(player_id: int, viewer: CurrentUser, db: Db) -> dict:
         "stats": stats_with_leaders(stats.player_stats(db, user.id)),
         "belts": player_belts(db, user),
         "is_me": viewer.id == user.id,
+        "head_to_head": None if viewer.id == user.id else stats.head_to_head(db, viewer.id, user.id),
     }
 
 

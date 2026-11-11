@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import FightCard from '../components/FightCard.vue'
+import SkeletonBlock from '../components/SkeletonBlock.vue'
 import UpcomingBoutCard from '../components/UpcomingBoutCard.vue'
 import { errorText, useLoad } from '../feedback'
 import type { FightBrief, FightKind, UpcomingBout } from '../types'
@@ -64,7 +65,7 @@ void load(true)
         <FightCard v-for="fight in items" :key="fight.id" :fight="fight" />
       </div>
       <p v-else-if="!loading && !problem" class="empty">Подтверждённых боёв пока нет.</p>
-      <p v-if="loading" class="muted">Загрузка…</p>
+      <SkeletonBlock v-if="loading" kind="list" :count="items.length ? 1 : 3" />
       <button v-if="items.length < total && !loading" class="btn" style="align-self: center" @click="load(false)">Показать ещё</button>
     </section>
   </main>
