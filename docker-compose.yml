@@ -45,6 +45,25 @@ services:
     ports:
       - "${APP_PORT:-8080}:80"
 
+  # HTTPS-прокси для продакшена. Включается через COMPOSE_PROFILES=https в .env,
+  # тогда APP_PORT фронтенда надо перевести на 127.0.0.1:8080, чтобы освободить порт 80.
+  caddy:
+    profiles: ["https"]
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
   tests:
     profiles: ["test"]
     build:
@@ -59,3 +78,5 @@ services:
 volumes:
   postgres_data:
   uploads_data:
+  caddy_data:
+  caddy_config:

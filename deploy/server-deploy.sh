@@ -56,9 +56,12 @@ main() {
     exit 1
   fi
 
-  local port
-  port=$(sed -n 's/^APP_PORT=//p' .env | tail -n 1)
-  if ! curl -fsS --retry 10 --retry-delay 2 --retry-all-errors -o /dev/null "http://127.0.0.1:${port:-80}/api/health"; then
+  # APP_PORT бывает просто портом (80) или адресом с портом (127.0.0.1:8080, когда впереди Caddy).
+  local addr
+  addr=$(sed -n 's/^APP_PORT=//p' .env | tail -n 1)
+  addr=${addr:-80}
+  [[ "$addr" == *:* ]] || addr="127.0.0.1:$addr"
+  if ! curl -fsS --retry 10 --retry-delay 2 --retry-all-errors -o /dev/null "http://$addr/api/health"; then
     docker compose logs --tail 80 backend frontend
     echo "Сайт не отвечает на /api/health" >&2
     exit 1
