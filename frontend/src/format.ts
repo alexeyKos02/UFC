@@ -114,6 +114,16 @@ export function fromLocalInput(value: string): string {
   return new Date(value).toISOString()
 }
 
+/** Форма слова для числа: plural(5, ['очко', 'очка', 'очков']) → 'очков'. */
+export function plural(value: number, forms: [string, string, string]): string {
+  const n = Math.abs(value) % 100
+  const last = n % 10
+  if (n > 10 && n < 20) return forms[2]
+  if (last === 1) return forms[0]
+  if (last >= 2 && last <= 4) return forms[1]
+  return forms[2]
+}
+
 export function signed(value: number): string {
   if (value > 0) return `+${value}`
   return value < 0 ? `−${Math.abs(value)}` : '0'

@@ -253,7 +253,10 @@ export interface MyFights {
 }
 
 export interface LeagueRow {
-  player: PlayerBrief
+  /** У чемпиона дополнительно приходит фото в полный рост. */
+  player: PlayerBrief & { full_body_url?: string | null }
+  /** Только у чемпиона: основной пояс. */
+  belt?: BeltBrief
   points: number
   points_place: number | null
   display_place: number | null

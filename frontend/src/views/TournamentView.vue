@@ -106,7 +106,7 @@ function slots(match: MatchOut): (PlayerBrief | null)[] {
         <section class="section">
           <h2>Участники</h2>
           <div v-if="data.participants.length" class="row">
-            <span v-for="player in data.participants" :key="player.id" class="card" style="padding: 6px 10px">
+            <span v-for="player in data.participants" :key="player.id" class="card" style="padding: 6px 10px; max-width: 100%">
               <PlayerChip :player="player" :size="24" />
             </span>
           </div>

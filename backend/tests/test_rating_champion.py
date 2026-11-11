@@ -25,6 +25,9 @@ def test_champion_is_first_without_number_and_others_start_from_one(admin, playe
         challenger.id: 3,
     }
     assert not any(row["is_champion"] for row in rows[1:])
+    assert rows[0]["belt"]["kind"] == "main"
+    assert "full_body_url" in rows[0]["player"]
+    assert all("belt" not in row and "full_body_url" not in row["player"] for row in rows[1:])
 
 
 def test_champion_stays_on_top_with_fewer_points(admin, players):

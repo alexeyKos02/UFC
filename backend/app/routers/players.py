@@ -7,6 +7,7 @@ from app.models import User, UserStatus
 from app.schemas import ProfileIn
 from app.serializers import (
     account_out,
+    belt_brief,
     fight_brief,
     image_url,
     player_belts,
@@ -14,7 +15,7 @@ from app.serializers import (
     rating_row_out,
     stats_with_leaders,
 )
-from app.services import accounts, rating, stats, uploads
+from app.services import accounts, belts, rating, stats, uploads
 
 router = APIRouter(tags=["players"])
 
@@ -27,7 +28,12 @@ def league(viewer: CurrentUser, db: Db, q: str | None = None) -> list[dict]:
     for row in rating.rating_table(db):
         if query and query not in row.user.nickname.lower():
             continue
-        result.append({**rating_row_out(row, viewer), **league_stats.get(row.user.id, stats.EMPTY_STATS)})
+        item = {**rating_row_out(row, viewer), **league_stats.get(row.user.id, stats.EMPTY_STATS)}
+        if row.is_champion:
+            # Чемпиону нужна «афиша» над таблицей: фото в полный рост и пояс.
+            item["player"]["full_body_url"] = image_url(row.user.full_body_path)
+            item["belt"] = belt_brief(belts.main_belt(db))
+        result.append(item)
     return result
 
 
