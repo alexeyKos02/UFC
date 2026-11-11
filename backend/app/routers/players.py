@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile
 from sqlalchemy import select
 
+from app.db import utcnow
 from app.deps import CurrentUser, Db
 from app.errors import not_found
 from app.models import User, UserStatus
@@ -88,6 +89,15 @@ def _replace_image(db, user: User, attribute: str, upload: UploadFile, folder: s
     setattr(user, attribute, new_path)
     db.commit()
     uploads.delete_image(old_path)
+    return account_out(user)
+
+
+@router.post("/me/onboarding")
+def finish_onboarding(user: CurrentUser, db: Db) -> dict:
+    """Отмечает, что знакомство с сайтом пройдено или пропущено. Повторный вызов ничего не меняет."""
+    if user.onboarded_at is None:
+        user.onboarded_at = utcnow()
+        db.commit()
     return account_out(user)
 
 

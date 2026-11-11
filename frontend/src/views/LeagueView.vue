@@ -38,7 +38,7 @@ const rows = computed(() => (champion.value ? data.value?.filter((row) => row !=
     </div>
     <StateBlock :loading="loading" :error="error">
       <div v-if="data?.length" class="league-board">
-        <section v-if="champion && champion.belt" class="champion-poster" aria-label="Чемпион лиги">
+        <section v-if="champion && champion.belt" class="champion-poster" aria-label="Чемпион лиги" data-tour="league-champion">
           <RouterLink class="poster-photo" :to="`/players/${champion.player.id}`" tabindex="-1" aria-hidden="true">
             <img v-if="champion.player.full_body_url" :src="champion.player.full_body_url" alt="" />
             <svg v-else class="poster-silhouette" viewBox="0 0 120 200" preserveAspectRatio="xMidYMax meet">
@@ -62,7 +62,7 @@ const rows = computed(() => (champion.value ? data.value?.filter((row) => row !=
           </div>
         </section>
         <h2 v-if="champion" class="board-caption">Претенденты</h2>
-        <div class="table-wrap">
+        <div class="table-wrap" data-tour="league-table">
         <table class="fit-table">
           <thead>
             <tr>

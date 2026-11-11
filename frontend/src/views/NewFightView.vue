@@ -71,11 +71,11 @@ async function plan(): Promise<void> {
     </p>
     <StateBlock :loading="loading" :error="error">
       <section class="card stack">
-        <div class="choice-group" role="radiogroup" aria-label="Когда проходит бой">
+        <div class="choice-group" role="radiogroup" aria-label="Когда проходит бой" data-tour="fight-mode">
           <label class="choice"><input v-model="mode" type="radio" name="mode" value="played" /> Бой уже прошёл</label>
           <label class="choice"><input v-model="mode" type="radio" name="mode" value="planned" /> Бой ещё не состоялся</label>
         </div>
-        <label class="field">
+        <label class="field" data-tour="fight-opponent">
           Соперник
           <select v-model="opponentId">
             <option value="" disabled>Выберите соперника</option>

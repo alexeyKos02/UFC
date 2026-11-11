@@ -141,6 +141,8 @@ class User(Base):
     avatar_path: Mapped[str | None] = mapped_column(String(255))
     full_body_path: Mapped[str | None] = mapped_column(String(255))
     rating_points: Mapped[int] = mapped_column(Integer, default=1000, server_default="1000")
+    # Когда игрок прошёл или пропустил знакомство с сайтом. Пусто — покажем его при входе.
+    onboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_column()
 
     @property

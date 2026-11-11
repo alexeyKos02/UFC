@@ -24,7 +24,7 @@ const { data, error, loading, reload } = useLoad(() => api.get<MyFights>('/fight
     </div>
     <StateBlock :loading="loading" :error="error">
       <template v-if="data">
-        <section class="section">
+        <section class="section" data-tour="to-confirm">
           <h2>На подтверждение</h2>
           <div v-if="data.to_confirm.length" class="stack" style="gap: 16px">
             <FightCard v-for="fight in data.to_confirm" :key="fight.id" :fight="fight" actions @changed="reload" />
@@ -70,7 +70,7 @@ const { data, error, loading, reload } = useLoad(() => api.get<MyFights>('/fight
           <p v-else class="empty">Оспоренных записей нет.</p>
         </section>
 
-        <section class="section">
+        <section class="section" data-tour="waiting">
           <h2>Ждут подтверждения соперника</h2>
           <div v-if="data.waiting.length" class="stack" style="gap: 16px">
             <FightCard v-for="fight in data.waiting" :key="fight.id" :fight="fight" />

@@ -17,6 +17,8 @@ export interface Account {
   avatar_url: string | null
   full_body_url: string | null
   rating_points: number
+  /** Прошёл или пропустил знакомство с сайтом. */
+  onboarded: boolean
 }
 
 export interface AdminUser extends Account {

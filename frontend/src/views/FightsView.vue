@@ -39,7 +39,7 @@ void load(true)
   <main class="container page">
     <div class="page-head">
       <h1>Бои лиги</h1>
-      <RouterLink class="btn primary" to="/fights/new">Записать бой</RouterLink>
+      <RouterLink class="btn primary" to="/fights/new" data-tour="new-fight">Записать бой</RouterLink>
     </div>
 
     <section v-if="upcoming.data.value?.length" class="section">

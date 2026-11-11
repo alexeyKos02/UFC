@@ -51,6 +51,7 @@ def account_out(user: User) -> dict:
         "avatar_url": image_url(user.avatar_path),
         "full_body_url": image_url(user.full_body_path),
         "rating_points": user.rating_points,
+        "onboarded": user.onboarded_at is not None,
     }
 
 

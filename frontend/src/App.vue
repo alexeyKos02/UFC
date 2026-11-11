@@ -3,7 +3,9 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { api } from './api'
 import { currentUser, isStaff, signOut } from './auth'
+import TourGuide from './components/TourGuide.vue'
 import { toasts, useAction } from './feedback'
+import { onboardingVisible, openOnboarding } from './onboarding'
 import type { MyFights } from './types'
 
 const route = useRoute()
@@ -52,6 +54,7 @@ async function logout(): Promise<void> {
       </RouterLink>
       <button
         class="btn sm menu-toggle"
+        data-tour="nav-my-fights"
         :aria-expanded="menuOpen"
         aria-controls="main-nav"
         @click="menuOpen = !menuOpen"
@@ -63,18 +66,23 @@ async function logout(): Promise<void> {
         <RouterLink to="/tournaments">Турниры</RouterLink>
         <RouterLink to="/league">Игроки и рейтинг</RouterLink>
         <RouterLink to="/fights">Бои</RouterLink>
-        <RouterLink to="/my-fights">
+        <RouterLink to="/my-fights" data-tour="nav-my-fights">
           Мои бои<span v-if="toConfirm" class="counter" :aria-label="`На подтверждение: ${toConfirm}`">{{ toConfirm }}</span>
         </RouterLink>
         <RouterLink to="/belts">Пояса</RouterLink>
         <RouterLink v-if="isStaff" to="/admin">Админка</RouterLink>
-        <RouterLink class="nav-end" :to="`/players/${currentUser?.id}`">{{ currentUser?.nickname }}</RouterLink>
+        <a class="nav-end nav-help" href="#" title="Как это работает" @click.prevent="openOnboarding">
+          <span class="help-mark" aria-hidden="true">?</span><span class="help-text">Как это работает</span>
+        </a>
+        <RouterLink class="nav-me" :to="`/players/${currentUser?.id}`">{{ currentUser?.nickname }}</RouterLink>
         <a href="#" @click.prevent="logout">Выйти</a>
       </nav>
     </div>
   </header>
 
   <RouterView :key="route.path" />
+
+  <TourGuide v-if="showChrome && onboardingVisible" />
 
   <div class="toasts" role="status" aria-live="polite">
     <div v-for="toast in toasts" :key="toast.id" class="toast" :class="toast.kind">{{ toast.text }}</div>

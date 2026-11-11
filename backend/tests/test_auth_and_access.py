@@ -185,3 +185,19 @@ def test_upload_rejects_oversized_file(players):
     payload = _png_bytes() + b"0" * (settings.max_upload_bytes + 1)
     response = player.post("/me/avatar", files={"file": ("a.png", payload, "image/png")})
     assert response.status_code == 413
+
+
+def test_onboarding_is_shown_once(players):
+    (player,) = players(1)
+    assert player.user["onboarded"] is False
+    assert player.get("/auth/me").json()["onboarded"] is False
+
+    first = player.post("/me/onboarding")
+    assert first.status_code == 200
+    assert first.json()["onboarded"] is True
+    assert player.post("/me/onboarding").json()["onboarded"] is True
+    assert player.get("/auth/me").json()["onboarded"] is True
+
+
+def test_onboarding_needs_login():
+    assert Api("guest").post("/me/onboarding").status_code == 401
