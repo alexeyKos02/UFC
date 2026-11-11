@@ -1536,6 +1536,20 @@ th.num {
   transition: top 0.25s, left 0.25s, width 0.25s, height 0.25s;
 }
 
+.tour-loading {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 72;
+  transform: translate(-50%, -50%);
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 14px;
+}
+
 .tour-card {
   position: fixed;
   z-index: 72;

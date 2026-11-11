@@ -15,6 +15,11 @@ interface TourStep {
   target?: string[]
   /** Если элемента на странице нет (например, пояс вакантен), шаг пропускается. */
   optional?: boolean
+  /**
+   * Элемент, который появляется вместе с target, когда страница догрузилась. Для необязательного шага
+   * по нему видно, что target уже не появится, и тур не ждёт впустую.
+   */
+  readyWhen?: string
 }
 
 const steps: TourStep[] = [
@@ -64,6 +69,7 @@ const steps: TourStep[] = [
     route: '/league',
     target: ['[data-tour="league-champion"]'],
     optional: true,
+    readyWhen: '[data-tour="league-table"]',
   },
   {
     title: 'Таблица лиги',
@@ -81,6 +87,8 @@ const route = useRoute()
 const router = useRouter()
 const index = ref(0)
 const ready = ref(false)
+/** Страница грузится дольше мгновения: показываем «Открываю страницу…» вместо пустого затемнения. */
+const loading = ref(false)
 const spot = ref<{ top: number; left: number; width: number; height: number } | null>(null)
 const card = ref<HTMLElement | null>(null)
 const cardSize = ref({ width: 0, height: 0 })
@@ -91,6 +99,7 @@ const last = computed(() => index.value === steps.length - 1)
 let target: HTMLElement | null = null
 let showToken = 0
 let frame = 0
+let loadingTimer = 0
 
 const PAD = 6
 const GAP = 12
@@ -112,7 +121,7 @@ function findTarget(selectors: string[]): HTMLElement | null {
 }
 
 // Страницы грузят данные после перехода, поэтому элемент ищем несколько секунд.
-async function waitForTarget(selectors: string[], token: number): Promise<HTMLElement | null> {
+async function waitFor(selectors: string[], token: number): Promise<HTMLElement | null> {
   for (let attempt = 0; attempt < 40; attempt++) {
     if (token !== showToken) return null
     const element = findTarget(selectors)
@@ -120,6 +129,14 @@ async function waitForTarget(selectors: string[], token: number): Promise<HTMLEl
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   return null
+}
+
+async function waitForTarget(wanted: TourStep, token: number): Promise<HTMLElement | null> {
+  if (!wanted.target) return null
+  if (!wanted.readyWhen) return waitFor(wanted.target, token)
+  await waitFor([wanted.readyWhen], token)
+  await nextTick()
+  return findTarget(wanted.target)
 }
 
 function scrollToTarget(element: HTMLElement): void {
@@ -160,9 +177,13 @@ async function show(next: number, direction: 1 | -1 = 1): Promise<void> {
   ready.value = false
   target = null
   spot.value = null
+  clearTimeout(loadingTimer)
+  loadingTimer = window.setTimeout(() => {
+    if (token === showToken && !ready.value) loading.value = true
+  }, 300)
   if (wanted.route && route.path !== wanted.route) await router.push(wanted.route)
   if (wanted.target) {
-    const element = await waitForTarget(wanted.target, token)
+    const element = await waitForTarget(wanted, token)
     if (token !== showToken) return
     if (!element && wanted.optional) {
       const skipTo = next + direction
@@ -173,9 +194,12 @@ async function show(next: number, direction: 1 | -1 = 1): Promise<void> {
   }
   index.value = next
   ready.value = true
+  loading.value = false
+  clearTimeout(loadingTimer)
   await nextTick()
   measure()
-  card.value?.querySelector<HTMLElement>('h2')?.focus()
+  // preventScroll: Safari на iPhone иначе прокручивает страницу к фокусу, и подсветка уезжает от элемента.
+  card.value?.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true })
 }
 
 const spotStyle = computed(() =>
@@ -224,6 +248,7 @@ onMounted(() => {
 onUnmounted(() => {
   showToken++
   cancelAnimationFrame(frame)
+  clearTimeout(loadingTimer)
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('resize', scheduleMeasure)
   window.removeEventListener('scroll', scheduleMeasure, true)
@@ -236,6 +261,7 @@ onUnmounted(() => {
       <!-- Ловит нажатия: во время тура страница только показывается. -->
       <div class="tour-blocker" :class="{ dim: !spot }" @click.stop />
       <div v-if="spot" class="tour-spot" :style="spotStyle" />
+      <div v-if="loading && !ready" class="tour-loading" role="status">Открываю страницу…</div>
       <div
         v-show="ready"
         ref="card"
