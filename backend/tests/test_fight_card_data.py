@@ -1,3 +1,4 @@
+from app.services.rating import elo_delta
 from tests.conftest import create_fight, play
 from tests.test_adjustments_and_special_places import body, upset_setup
 
@@ -10,7 +11,7 @@ def test_list_item_has_photo_fields_and_points_by_side(players):
     first, second = players(2)
     fight = play(first, second, first)
     brief = brief_of(first, fight["id"])
-    assert brief["points_change"] == [2, -2]
+    assert brief["points_change"] == [20, -20]
     assert brief["player1"]["full_body_url"] is None
     assert "full_body_url" in brief["player2"]
 
@@ -18,13 +19,16 @@ def test_list_item_has_photo_fields_and_points_by_side(players):
 def test_points_by_side_follow_player_order_when_second_player_wins(players):
     first, second = players(2)
     fight = play(first, second, second)
-    assert brief_of(first, fight["id"])["points_change"] == [-2, 2]
+    assert brief_of(first, fight["id"])["points_change"] == [-20, 20]
 
 
 def test_points_by_side_include_manual_adjustment(admin, players):
     top, bottom, fight, _ = upset_setup(players)
     assert admin.put(f"/admin/rating/adjustments/{fight['id']}", body(bottom, 2)).status_code == 200
-    assert brief_of(admin, fight["id"])["points_change"] == [7, -7]
+    changes = {item["player"]["id"]: item for item in fight["rating_changes"]}
+    auto = changes[bottom.id]
+    assert auto["delta"] == elo_delta(auto["points_before"], changes[top.id]["points_before"])
+    assert brief_of(admin, fight["id"])["points_change"] == [auto["delta"] + 2, -auto["delta"] - 2]
 
 
 def test_unconfirmed_fight_has_no_points_yet(players):

@@ -49,7 +49,7 @@ def test_place_after_is_stored_for_both_players(players):
     fight = play(first, second, first)
     changes = {item["player"]["id"]: item for item in fight["rating_changes"]}
     assert (changes[first.id]["place_before"], changes[first.id]["place_after"]) == (1, 1)
-    # После боя: first 102, third 100, second 98.
+    # После боя: first 1020, third 1000, second 980.
     assert (changes[second.id]["place_before"], changes[second.id]["place_after"]) == (1, 3)
 
 
@@ -62,7 +62,7 @@ def test_planned_fight_is_listed_and_changes_nothing(players):
 
     assert [row["id"] for row in upcoming(witness)] == [item["id"]]
     assert witness.get("/fights").json()["total"] == 0
-    assert first.points() == 100
+    assert first.points() == 1000
     assert first.profile()["stats"]["fights"] == 0
     assert [row["id"] for row in second.get("/fights/mine").json()["upcoming"]] == [item["id"]]
     assert witness.get("/fights/mine").json()["upcoming"] == []
@@ -104,11 +104,11 @@ def test_result_of_planned_fight_goes_through_confirmation(players):
     assert fight["status"] == "pending"
     assert fight["kind"] == "regular"
     assert upcoming(first) == []
-    assert first.points() == 100
+    assert first.points() == 1000
 
     assert confirm(first, fight).json()["status"] == "confirmed"
-    assert second.points() == 102
-    assert first.points() == 98
+    assert second.points() == 1020
+    assert first.points() == 980
 
 
 def test_planned_result_rules(players):

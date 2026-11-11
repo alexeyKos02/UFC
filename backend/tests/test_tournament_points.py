@@ -26,7 +26,7 @@ def test_tournament_fights_do_not_change_points_but_count_in_stats(admin, player
     assert fight["points_change"] is None
     winner = by_id[fight["winner_id"]]
     loser = by_id[fight["player1"]["id"] if fight["player2"]["id"] == winner.id else fight["player2"]["id"]]
-    assert (winner.points(), loser.points()) == (100, 100)
+    assert (winner.points(), loser.points()) == (1000, 1000)
     assert winner.profile()["stats"]["wins"] == 1
     assert loser.profile()["stats"]["losses"] == 1
 
@@ -36,8 +36,8 @@ def test_only_tournament_winner_gets_points_after_final(admin, players):
     tournament = new_tournament(admin, capacity=4, win_points=25)
     run_tournament_start(admin, tournament["id"], apis)
     finish_tournament(admin, apis, tournament["id"], champion=apis[0])
-    assert apis[0].points() == 125
-    assert [api.points() for api in apis[1:]] == [100, 100, 100]
+    assert apis[0].points() == 1025
+    assert [api.points() for api in apis[1:]] == [1000, 1000, 1000]
 
 
 def test_tournament_with_zero_points_changes_nothing(admin, players):
@@ -45,7 +45,7 @@ def test_tournament_with_zero_points_changes_nothing(admin, players):
     tournament = new_tournament(admin, capacity=2, win_points=0)
     run_tournament_start(admin, tournament["id"], apis)
     finish_tournament(admin, apis, tournament["id"], champion=apis[0])
-    assert [api.points() for api in apis] == [100, 100]
+    assert [api.points() for api in apis] == [1000, 1000]
 
 
 def test_cancelled_tournament_gives_no_points(admin, players):
@@ -53,7 +53,7 @@ def test_cancelled_tournament_gives_no_points(admin, players):
     tournament = new_tournament(admin, capacity=2, win_points=25)
     run_tournament_start(admin, tournament["id"], apis)
     assert admin.post(f"/admin/tournaments/{tournament['id']}/cancel", {"reason": "Перенос"}).status_code == 200
-    assert [api.points() for api in apis] == [100, 100]
+    assert [api.points() for api in apis] == [1000, 1000]
 
 
 def test_final_confirmation_awards_points_once(admin, players):
@@ -71,8 +71,8 @@ def test_final_confirmation_awards_points_once(admin, players):
 
     assert {response.status_code for response in responses} == {200}
     assert confirm(second, submitted).status_code == 200
-    assert first.points() == 130
-    assert second.points() == 100
+    assert first.points() == 1030
+    assert second.points() == 1000
 
 
 def test_win_points_are_required_and_not_negative(admin):
@@ -97,7 +97,7 @@ def test_win_points_can_change_until_tournament_ends(admin, players):
     assert updated.json()["win_points"] == 40
 
     finish_tournament(admin, apis, tournament["id"], champion=apis[0])
-    assert apis[0].points() == 140
+    assert apis[0].points() == 1040
     assert admin.patch(url, {**body, "win_points": 50}).status_code == 409
     assert tournament_state(admin, tournament["id"])["win_points"] == 40
 

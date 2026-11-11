@@ -1,3 +1,4 @@
+from app.services.rating import elo_delta
 from tests.conftest import ladder, play
 from tests.test_belts import play_title, schedule
 
@@ -13,7 +14,7 @@ def crown(admin, champion, challenger) -> None:
 def test_champion_is_first_without_number_and_others_start_from_one(admin, players):
     champion, challenger, third = players(3)
     crown(admin, champion, challenger)
-    # Очки: чемпион 102, админ и third по 100, challenger 98.
+    # Очки: чемпион 1020, админ и third по 1000, challenger 980.
     rows = table(third)
     assert rows[0]["player"]["id"] == champion.id
     assert rows[0]["is_champion"] is True
@@ -68,9 +69,9 @@ def test_champion_display_does_not_change_points_or_upsets(admin, players):
     assert rows[bottom.id]["display_place"] == 3
     assert rows[bottom.id]["points_place"] == 4
 
-    bottom_before = bottom.points()
+    bottom_before, top_before = bottom.points(), top.points()
     fight = play(bottom, top, bottom)
-    assert bottom.points() == bottom_before + 5
+    assert bottom.points() == bottom_before + elo_delta(bottom_before, top_before)
     changes = {item["player"]["id"]: item for item in fight["rating_changes"]}
     assert changes[bottom.id]["place_before"] == 4
     assert changes[top.id]["place_before"] == 1

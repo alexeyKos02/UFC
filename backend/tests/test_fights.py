@@ -13,7 +13,7 @@ def test_fight_counts_only_after_second_confirmation(players):
     assert fight["status"] == "pending"
     assert fight["versions"][0]["confirmed_by"][0]["id"] == first.id
 
-    assert first.points() == 100
+    assert first.points() == 1000
     assert first.profile()["stats"]["fights"] == 0
     assert first.get("/fights").json()["total"] == 0
     inbox = second.get("/fights/mine").json()
@@ -21,8 +21,8 @@ def test_fight_counts_only_after_second_confirmation(players):
 
     confirmed = confirm(second, fight).json()
     assert confirmed["status"] == "confirmed"
-    assert first.points() == 102
-    assert second.points() == 98
+    assert first.points() == 1020
+    assert second.points() == 980
     assert first.get("/fights").json()["total"] == 1
     assert first.profile()["stats"]["wins"] == 1
     assert second.profile()["stats"]["losses"] == 1
@@ -54,8 +54,8 @@ def test_repeated_confirmation_counts_once(players):
     assert confirm(second, fight).status_code == 200
     assert confirm(second, fight).status_code == 200
     assert confirm(first, fight).status_code == 200
-    assert first.points() == 102
-    assert second.points() == 98
+    assert first.points() == 1020
+    assert second.points() == 980
     assert first.profile()["stats"]["fights"] == 1
 
 
@@ -65,8 +65,8 @@ def test_parallel_confirmations_give_one_result(players):
     with ThreadPoolExecutor(10) as pool:
         responses = list(pool.map(lambda _: confirm(second, fight), range(10)))
     assert {response.status_code for response in responses} == {200}
-    assert first.points() == 102
-    assert second.points() == 98
+    assert first.points() == 1020
+    assert second.points() == 980
     detail = first.get(f"/fights/{fight['id']}").json()
     assert len(detail["rating_changes"]) == 2
 
@@ -83,7 +83,7 @@ def test_initiator_confirmation_alone_does_not_finalize(players):
     fight = create_fight(first, second, first).json()
     assert confirm(first, fight).status_code == 200
     assert first.get(f"/fights/{fight['id']}").json()["status"] == "pending"
-    assert first.points() == 100
+    assert first.points() == 1000
 
 
 def test_dispute_then_correction_voids_old_confirmations(players):
@@ -110,12 +110,12 @@ def test_dispute_then_correction_voids_old_confirmations(players):
     assert data["versions"][0]["dispute_reason"] == "Победил я"
 
     assert second.post(f"/fights/{fight['id']}/confirm", {"version_no": 1}).status_code == 409
-    assert first.points() == 100
+    assert first.points() == 1000
 
     final = second.post(f"/fights/{fight['id']}/confirm", {"version_no": 2})
     assert final.json()["status"] == "confirmed"
-    assert first.points() == 98
-    assert second.points() == 102
+    assert first.points() == 980
+    assert second.points() == 1020
 
 
 def test_correction_rules(players):
@@ -204,7 +204,7 @@ def test_profile_history_lists_player_fights_newest_first(players):
     assert [row["id"] for row in rows] == [newer["id"], older["id"]]
     assert rows[1]["winner_id"] == first.id
     assert rows[1]["kind"] == "regular"
-    assert rows[1]["points_change"] == [2, -2]
+    assert rows[1]["points_change"] == [20, -20]
     assert rows[1]["player2"]["id"] == second.id
 
 

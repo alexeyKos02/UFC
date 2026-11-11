@@ -167,7 +167,7 @@ def _fill(db) -> None:
     # Апсет с ручной корректировкой и журналом.
     upset = played(p["zubr"], p["volk"], p["zubr"], days_ago(28), sub, 1)
     adjustments.save_adjustment(
-        db, admin, upset.id, p["zubr"].id, 2, "Победа в первом раунде над лидером таблицы", 0
+        db, admin, upset.id, p["zubr"].id, 20, "Победа в первом раунде над лидером таблицы", 0
     )
     # Апсет без корректировки: на нём можно проверить форму.
     played(p["lis"], p["kraken"], p["lis"], days_ago(26), ko, 2)
@@ -183,7 +183,7 @@ def _fill(db) -> None:
         created = tournaments.create_tournament(
             db,
             admin,
-            TournamentIn(title=title, description=description, capacity=capacity, win_points=20, belt_id=belt.id),
+            TournamentIn(title=title, description=description, capacity=capacity, win_points=200, belt_id=belt.id),
         )
         return created
 

@@ -140,7 +140,7 @@ class User(Base):
     nickname: Mapped[str] = mapped_column(String(32))
     avatar_path: Mapped[str | None] = mapped_column(String(255))
     full_body_path: Mapped[str | None] = mapped_column(String(255))
-    rating_points: Mapped[int] = mapped_column(Integer, default=100, server_default="100")
+    rating_points: Mapped[int] = mapped_column(Integer, default=1000, server_default="1000")
     created_at: Mapped[datetime] = created_at_column()
 
     @property

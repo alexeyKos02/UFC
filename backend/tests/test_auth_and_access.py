@@ -9,7 +9,7 @@ def test_registration_gives_active_player_with_100_points():
     api = register("newcomer")
     assert api.user["role"] == "player"
     assert api.user["status"] == "active"
-    assert api.user["rating_points"] == 100
+    assert api.user["rating_points"] == 1000
 
 
 def test_registration_ignores_client_supplied_role():
@@ -125,7 +125,7 @@ def test_unblock_restores_place_and_access(owner, players):
     relogin = Api(first.login)
     response = relogin.post("/auth/login", {"login": first.login, "password": PASSWORD})
     assert response.status_code == 200
-    assert response.json()["rating_points"] == 102
+    assert response.json()["rating_points"] == 1020
     assert relogin.get(f"/players/{first.id}").json()["rating"]["display_place"] == 1
 
 
@@ -141,7 +141,7 @@ def test_confirmation_rejected_when_other_participant_blocked(owner, players):
     owner.post(f"/admin/users/{first.id}/block")
     response = second.post(f"/fights/{fight['id']}/confirm", {"version_no": 1})
     assert response.status_code == 409
-    assert second.points() == 100
+    assert second.points() == 1000
 
 
 def _png_bytes() -> bytes:

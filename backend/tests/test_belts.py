@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
+from app.services.rating import elo_delta
 from tests.conftest import (
     confirm,
     finish_tournament,
@@ -98,7 +99,7 @@ def test_vacant_main_belt_title_fight(admin, players):
     title_fight = response.json()
     assert title_fight["champion_id"] is None
 
-    assert first.points() == 100
+    assert first.points() == 1000
     assert first.profile()["belts"]["active"] == []
     my_card = first.get("/fights/mine").json()["upcoming"][0]
     assert my_card["kind"] == "title"
@@ -106,12 +107,12 @@ def test_vacant_main_belt_title_fight(admin, players):
     assert my_card["can_submit"] is True
 
     submitted = first.post(f"/title-fights/{title_fight['id']}/result", result_body(first.id)).json()
-    assert first.points() == 100
+    assert first.points() == 1000
     assert main_belt(first)["champion"] is None
 
     confirm(second, submitted)
-    assert first.points() == 102
-    assert second.points() == 98
+    assert first.points() == 1020
+    assert second.points() == 980
     belts = first.profile()["belts"]
     assert belts["active"][0]["belt"]["kind"] == "main"
 
@@ -125,10 +126,10 @@ def test_champion_defense_and_transfer(admin, players):
     defense = schedule(admin, next_challenger).json()
     assert defense["player1"]["id"] == champion.id
     assert defense["champion_id"] == champion.id
-    points_before = champion.points()
+    points_before, challenger_before = champion.points(), next_challenger.points()
     played = play_title(defense, next_challenger, champion, champion)
     assert played["is_title_defense"] is True
-    assert champion.points() == points_before + 2
+    assert champion.points() == points_before + elo_delta(points_before, challenger_before)
     assert main_belt(admin)["champion"]["id"] == champion.id
     history = admin.get(f"/belts/{main_belt(admin)['id']}").json()["history"]
     assert [item["is_defense"] for item in history] == [True, False]
@@ -191,7 +192,7 @@ def test_cancel_closes_card_for_result_and_confirmation(admin, players):
     assert confirm(second, submitted).status_code == 409
     assert first.post(f"/title-fights/{title_fight['id']}/result", result_body(first.id)).status_code == 409
     assert first.get("/fights/mine").json()["upcoming"] == []
-    assert first.points() == 100
+    assert first.points() == 1000
     assert main_belt(admin)["champion"] is None
 
 
@@ -213,7 +214,7 @@ def test_parallel_title_confirmation_awards_once(admin, players):
     assert {response.status_code for response in responses} == {200}
     history = admin.get(f"/belts/{main_belt(admin)['id']}").json()["history"]
     assert len(history) == 1
-    assert first.points() == 102
+    assert first.points() == 1020
 
 
 def test_title_result_only_by_participant(admin, players):

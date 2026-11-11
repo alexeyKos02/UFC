@@ -5,6 +5,7 @@
 Он всегда первый в цепочке замков, поэтому взаимных блокировок между этими операциями нет.
 """
 
+import math
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -26,9 +27,14 @@ from app.models import (
 )
 
 RATING_LOCK_KEY = 7_202_411
+# Апсет — победа над соперником выше на 3 места или больше. Очков он больше не добавляет
+# (это делает Elo), но по нему отбираются бои для ручной корректировки.
 UPSET_GAP = 3
-UPSET_POINTS = 5
-REGULAR_POINTS = 2
+
+# Elo: ожидаемый результат 1 / (1 + 10^((Rсоперника − Rигрока) / ELO_SCALE)),
+# победитель получает round(ELO_K · (1 − ожидаемый)), проигравший теряет столько же.
+ELO_K = 40
+ELO_SCALE = 400
 
 
 def acquire_rating_lock(db: Session) -> None:
@@ -47,8 +53,14 @@ def points_places(db: Session) -> dict[int, int]:
     return {user_id: place for user_id, place in rows}
 
 
-def auto_delta(winner_place: int, loser_place: int) -> int:
-    return UPSET_POINTS if winner_place - loser_place >= UPSET_GAP else REGULAR_POINTS
+def expected_score(points: int, opponent_points: int) -> float:
+    return 1 / (1 + 10 ** ((opponent_points - points) / ELO_SCALE))
+
+
+def elo_delta(winner_points: int, loser_points: int) -> int:
+    """Очки, которые победитель забирает у проигравшего. Победа всегда даёт хотя бы 1 очко."""
+    gain = ELO_K * (1 - expected_score(winner_points, loser_points))
+    return max(1, math.floor(gain + 0.5))
 
 
 def is_upset(winner_place: int, loser_place: int) -> bool:
@@ -58,7 +70,7 @@ def is_upset(winner_place: int, loser_place: int) -> bool:
 def apply_fight_rating(db: Session, fight: Fight, winner: User, loser: User) -> None:
     places = points_places(db)
     winner_place, loser_place = places[winner.id], places[loser.id]
-    delta = auto_delta(winner_place, loser_place)
+    delta = elo_delta(winner.rating_points, loser.rating_points)
     winner_before, loser_before = winner.rating_points, loser.rating_points
     winner.rating_points += delta
     loser.rating_points -= delta

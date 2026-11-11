@@ -170,6 +170,15 @@ def play(initiator: Api, opponent: Api, winner: Api, moment: datetime | None = N
     return confirmed.json()
 
 
+def set_points(apis: list[Api], value: int = 1000) -> None:
+    """Ставит игрокам одинаковые очки: в Elo обмен победами почти никогда не даёт точного равенства."""
+    from app.models import User
+
+    with SessionLocal() as db:
+        db.query(User).filter(User.id.in_([api.id for api in apis])).update({User.rating_points: value})
+        db.commit()
+
+
 def ladder(apis: list[Api]) -> None:
     """Выстраивает строго убывающие очки: apis[0] выше всех, каждая пара соседей — разные места."""
     base = FIGHT_TIME - timedelta(days=400)

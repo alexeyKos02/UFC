@@ -4,24 +4,30 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.rating import auto_delta, break_tie
-from tests.conftest import FIGHT_TIME, confirm, create_fight, ladder, play
+from app.services.rating import break_tie, elo_delta, expected_score
+from tests.conftest import FIGHT_TIME, confirm, create_fight, ladder, play, set_points
 
 
 @pytest.mark.parametrize(
-    ("winner_place", "loser_place", "expected"),
+    ("winner_points", "loser_points", "expected"),
     [
-        (7, 3, 5),
-        (6, 3, 5),
-        (5, 3, 2),
-        (4, 3, 2),
-        (3, 3, 2),
-        (3, 5, 2),
-        (3, 7, 2),
+        (1000, 1000, 20),
+        (1000, 1100, 26),
+        (900, 1100, 30),
+        (600, 1000, 36),
+        (1100, 1000, 14),
+        (1100, 900, 10),
+        (1000, 600, 4),
+        (2500, 500, 1),
     ],
 )
-def test_delta_table(winner_place, loser_place, expected):
-    assert auto_delta(winner_place, loser_place) == expected
+def test_elo_delta_table(winner_points, loser_points, expected):
+    assert elo_delta(winner_points, loser_points) == expected
+
+
+def test_expected_scores_sum_to_one():
+    assert expected_score(1000, 1000) == 0.5
+    assert expected_score(1240, 1000) + expected_score(1000, 1240) == pytest.approx(1)
 
 
 def table_of(api) -> dict[int, dict]:
@@ -35,7 +41,7 @@ def display_order(api) -> list[int]:
 def test_equal_points_get_own_numbers_but_share_points_place(admin, players):
     first, second, third, fourth = players(4)
     play(first, second, first)
-    # Очки: first 102, admin, third и fourth по 100, second 98.
+    # Очки: first 1020, admin, third и fourth по 1000, second 980.
     table = table_of(admin)
     order = (first, admin, third, fourth, second)
     assert [table[api.id]["display_place"] for api in order] == [1, 2, 3, 4, 5]
@@ -47,7 +53,7 @@ def test_head_to_head_beats_alphabet_at_equal_points(players):
     play(second, first, second)
     play(first, third, first)
     play(first, third, first)
-    assert first.points() == second.points()
+    set_points([first, second])
     assert display_order(first) == [second.id, first.id, third.id]
 
 
@@ -59,7 +65,7 @@ def test_stronger_win_method_ranks_higher_when_head_to_head_is_even(players, bet
     first, second = players(2)
     confirm(first, create_fight(second, first, second, method=better).json())
     confirm(second, create_fight(first, second, first, method=worse).json())
-    assert first.points() == second.points()
+    set_points([first, second])
     assert display_order(first) == [second.id, first.id]
 
 
@@ -75,7 +81,7 @@ def test_three_way_cycle_is_decided_by_win_methods(players):
     confirm(second, create_fight(first, second, first, method="decision").json())
     confirm(third, create_fight(second, third, second, method="ko_tko").json())
     confirm(first, create_fight(third, first, third, method="submission").json())
-    assert len({api.points() for api in (first, second, third)}) == 1
+    set_points([first, second, third])
     assert display_order(first) == [second.id, third.id, first.id]
 
 
@@ -100,7 +106,7 @@ def test_fights_with_players_outside_the_tie_are_ignored():
     assert break_tie([first, second], [(first.id, outsider_id, None)]) == [second, first]
 
 
-def test_upset_when_lower_by_three_places(players):
+def test_underdog_win_uses_elo_and_keeps_total(players):
     apis = players(4)
     ladder(apis)
     top, _, _, bottom = apis
@@ -109,43 +115,43 @@ def test_upset_when_lower_by_three_places(players):
 
     top_before, bottom_before = top.points(), bottom.points()
     fight = play(bottom, top, bottom)
-    assert bottom.points() == bottom_before + 5
-    assert top.points() == top_before - 5
+    gain = elo_delta(bottom_before, top_before)
+    assert gain > 20
+    assert bottom.points() == bottom_before + gain
+    assert top.points() == top_before - gain
     assert bottom.points() + top.points() == top_before + bottom_before
 
     changes = {item["player"]["id"]: item for item in fight["rating_changes"]}
     assert changes[bottom.id]["place_before"] == 4
     assert changes[bottom.id]["points_before"] == bottom_before
-    assert changes[bottom.id]["delta"] == 5
-    assert changes[bottom.id]["points_after"] == bottom_before + 5
+    assert changes[bottom.id]["delta"] == gain
+    assert changes[bottom.id]["points_after"] == bottom_before + gain
     assert changes[top.id]["place_before"] == 1
-    assert changes[top.id]["delta"] == -5
+    assert changes[top.id]["delta"] == -gain
 
 
-def test_two_place_gap_is_regular(players):
-    apis = players(3)
-    ladder(apis)
-    top, _, bottom = apis
-    bottom_before = bottom.points()
-    play(bottom, top, bottom)
-    assert bottom.points() == bottom_before + 2
-
-
-def test_favorite_wins_regular_points(players):
+def test_favorite_win_gives_less_than_even_fight(players):
     apis = players(4)
     ladder(apis)
     top, _, _, bottom = apis
-    top_before = top.points()
+    top_before, bottom_before = top.points(), bottom.points()
     play(top, bottom, top)
-    assert top.points() == top_before + 2
+    gain = top.points() - top_before
+    assert gain == elo_delta(top_before, bottom_before)
+    assert 1 <= gain < 20
 
 
-def test_points_can_go_negative(players):
+def test_beating_the_same_weak_player_brings_less_and_less(players):
     weak, strong = players(2)
-    for hour in range(55):
+    gains = []
+    for hour in range(10):
+        before = strong.points()
         play(strong, weak, strong, FIGHT_TIME + timedelta(hours=hour))
-    assert weak.points() < 0
-    assert weak.points() + strong.points() == 200
+        gains.append(strong.points() - before)
+    assert gains == sorted(gains, reverse=True)
+    assert gains[0] == 20
+    assert gains[-1] < 10
+    assert weak.points() + strong.points() == 2000
 
 
 def test_new_registration_shares_starting_points(players):
@@ -154,7 +160,7 @@ def test_new_registration_shares_starting_points(players):
     from tests.conftest import register
 
     late = register("latecomer")
-    assert late.points() == 100
+    assert late.points() == 1000
     assert table_of(late)[late.id]["display_place"] == 2
 
 
@@ -172,12 +178,12 @@ def test_parallel_final_confirmations_use_sequential_state(players):
         detail = hub.get(f"/fights/{fight['id']}").json()
         snapshots.append(next(item for item in detail["rating_changes"] if item["player"]["id"] == hub.id))
     snapshots.sort(key=lambda item: item["points_before"])
-    assert snapshots[0]["points_before"] == 100
+    assert snapshots[0]["points_before"] == 1000
     for previous, current in zip(snapshots, snapshots[1:], strict=False):
         assert current["points_before"] == previous["points_after"]
-    assert hub.points() == 100 + 2 * len(others)
+    assert hub.points() == snapshots[-1]["points_after"]
     total = sum(api.points() for api in apis)
-    assert total == 100 * len(apis)
+    assert total == 1000 * len(apis)
 
 
 def test_database_rejects_second_rating_change_for_same_fight(players):

@@ -100,7 +100,7 @@ def test_bye_is_not_a_fight_or_win(admin, players):
     assert bye["winner_id"] == bye_player.id
     assert bye["fight_id"] is None
     assert bye_player.profile()["stats"]["fights"] == 0
-    assert bye_player.points() == 100
+    assert bye_player.points() == 1000
     final = state["rounds"][1]["matches"][0]
     assert bye_player.id in [p["id"] for p in (final["player1"], final["player2"]) if p]
 
@@ -237,7 +237,7 @@ def test_cancel_keeps_confirmed_fights_and_gives_no_belt(admin, players):
     assert state["winner"] is None
 
     assert confirm(second_other, open_fight).status_code == 409
-    assert second_other.points() == 100
+    assert second_other.points() == 1000
     assert admin.get(f"/fights/{confirmed['id']}").json()["status"] == "confirmed"
     assert admin.get(f"/belts/{belt['id']}").json()["champion"] is None
 

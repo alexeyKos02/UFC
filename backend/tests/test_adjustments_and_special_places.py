@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 
+from app.services.rating import elo_delta
 from tests.conftest import confirm, create_fight, ladder, play
 
 
@@ -27,8 +28,10 @@ def test_adjustment_add_change_and_cancel(admin, players):
     assert bottom.points() == bottom_start + 2
     assert top.points() == top_start - 2
 
-    autos = {item["player"]["id"]: item["delta"] for item in created.json()["rating_changes"]}
-    assert autos == {bottom.id: 5, top.id: -5}
+    autos = {item["player"]["id"]: item for item in created.json()["rating_changes"]}
+    upset_gain = elo_delta(autos[bottom.id]["points_before"], autos[top.id]["points_before"])
+    assert upset_gain > 20
+    assert {player_id: item["delta"] for player_id, item in autos.items()} == {bottom.id: upset_gain, top.id: -upset_gain}
 
     changed = admin.put(url, body(bottom, 3, version=1, reason="Пересмотр"))
     assert changed.json()["adjustment"]["winner_delta"] == 3
@@ -166,8 +169,10 @@ def test_special_place_scenario_from_spec(admin, players):
 
     top_before, fourth_before = top.points(), fourth.points()
     play(fourth, top, fourth)
-    assert fourth.points() == fourth_before + 5
-    assert top.points() == top_before - 5
+    gain = elo_delta(fourth_before, top_before)
+    assert gain > 20
+    assert fourth.points() == fourth_before + gain
+    assert top.points() == top_before - gain
 
     other = apis[1]
     taken = admin.put(f"/admin/rating/special-places/{other.id}", {"place": 1})
@@ -209,7 +214,7 @@ def test_special_place_marker_is_visible_only_to_staff(owner, admin, players):
 def test_remaining_players_fill_free_numbers(admin, players):
     first, second, third, fourth, fifth = players(5)
     play(first, second, first)
-    # Очки: first 102, admin/third/fourth/fifth 100, second 98. Спецместо №2 у игрока second.
+    # Очки: first 1020, admin/third/fourth/fifth 1000, second 980. Спецместо №2 у игрока second.
     assert admin.put(f"/admin/rating/special-places/{second.id}", {"place": 2}).status_code == 200
     rows = {row["player"]["id"]: row for row in first.get("/players").json()}
     order = (first, second, admin, third, fourth, fifth)
@@ -305,4 +310,4 @@ def test_rejected_fight_confirm_leaves_rating(players):
     fight = create_fight(first, second, first).json()
     second.post(f"/fights/{fight['id']}/dispute", {"version_no": 1, "reason": "Спор"})
     assert confirm(second, fight).status_code == 409
-    assert first.points() == 100
+    assert first.points() == 1000
