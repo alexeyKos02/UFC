@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { currentUser } from '../auth'
 import { formatDate, methodLabel, plural, signed } from '../format'
@@ -7,6 +7,8 @@ import type { HeadToHead, MethodKey, PlayerBrief } from '../types'
 import PlayerAvatar from './PlayerAvatar.vue'
 
 const props = defineProps<{ h2h: HeadToHead; rival: PlayerBrief }>()
+// Сначала виден только счёт, подробности — по нажатию.
+const expanded = ref(false)
 
 const METHODS: { key: MethodKey; label: string }[] = [
   { key: 'ko_tko', label: methodLabel.ko_tko },
@@ -60,6 +62,18 @@ function resultLine(item: HeadToHead['recent'][number]): string {
       </div>
       <div class="h2h-bar" aria-hidden="true"><span :style="{ width: `${share}%` }" /></div>
 
+      <button
+        class="h2h-toggle"
+        type="button"
+        :aria-expanded="expanded"
+        aria-controls="h2h-details"
+        @click="expanded = !expanded"
+      >
+        {{ expanded ? 'Свернуть' : 'Подробнее' }}
+        <span class="h2h-chevron" :class="{ open: expanded }" aria-hidden="true">▾</span>
+      </button>
+
+      <div v-show="expanded" id="h2h-details" class="h2h-details">
       <div class="h2h-facts">
         <div v-if="streakText" class="h2h-fact">
           <span class="small muted">Текущая серия</span>
@@ -93,6 +107,7 @@ function resultLine(item: HeadToHead['recent'][number]): string {
         </RouterLink>
       </div>
       <RouterLink class="btn sm" style="align-self: flex-start" :to="`/fights/new?opponent=${rival.id}`">Записать новый бой</RouterLink>
+      </div>
     </template>
 
     <template v-else>

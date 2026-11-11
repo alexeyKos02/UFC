@@ -712,6 +712,39 @@ th {
   background: var(--red);
 }
 
+.h2h-toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  font: 500 14px/1.2 var(--body);
+  cursor: pointer;
+}
+
+.h2h-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.h2h-chevron {
+  transition: transform 0.2s;
+}
+
+.h2h-chevron.open {
+  transform: rotate(180deg);
+}
+
+.h2h-details {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .h2h-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
