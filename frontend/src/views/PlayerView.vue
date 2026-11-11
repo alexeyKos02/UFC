@@ -134,9 +134,9 @@ async function upload(event: Event, path: string): Promise<void> {
                 <RouterLink class="link" :to="`/belts/${item.belt.id}`">{{ item.belt.name }}</RouterLink>
                 <ul class="small muted" style="margin: 0; padding-left: 16px">
                   <li v-for="win in item.wins" :key="win.id">
-                    {{ formatDate(win.won_at) }}{{ win.is_defense ? ', защита' : '' }} —
-                    <RouterLink v-if="win.tournament" class="link" :to="`/tournaments/${win.tournament.id}`">{{ win.tournament.title }}</RouterLink>
-                    <RouterLink v-else class="link" :to="`/fights/${win.fight_id}`">титульный бой</RouterLink>
+                    {{ formatDate(win.won_at) }}{{ win.is_defense ? ', защита' : '' }}
+                    <template v-if="win.tournament">— <RouterLink class="link" :to="`/tournaments/${win.tournament.id}`">{{ win.tournament.title }}</RouterLink></template>
+                    <template v-else-if="win.fight_id">— <RouterLink class="link" :to="`/fights/${win.fight_id}`">титульный бой</RouterLink></template>
                   </li>
                 </ul>
               </div>
@@ -153,9 +153,9 @@ async function upload(event: Event, path: string): Promise<void> {
                 <span class="badge plain tone-grey" style="white-space: normal">{{ item.caption }}</span>
                 <ul class="small muted" style="margin: 0; padding-left: 16px">
                   <li v-for="win in item.wins" :key="win.id">
-                    {{ formatDate(win.won_at) }}{{ win.is_defense ? ', защита' : '' }} —
-                    <RouterLink v-if="win.tournament" class="link" :to="`/tournaments/${win.tournament.id}`">{{ win.tournament.title }}</RouterLink>
-                    <RouterLink v-else class="link" :to="`/fights/${win.fight_id}`">титульный бой</RouterLink>
+                    {{ formatDate(win.won_at) }}{{ win.is_defense ? ', защита' : '' }}
+                    <template v-if="win.tournament">— <RouterLink class="link" :to="`/tournaments/${win.tournament.id}`">{{ win.tournament.title }}</RouterLink></template>
+                    <template v-else-if="win.fight_id">— <RouterLink class="link" :to="`/fights/${win.fight_id}`">титульный бой</RouterLink></template>
                   </li>
                 </ul>
               </div>

@@ -1,8 +1,10 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.errors import not_found
-from app.models import Belt, BeltKind, BeltWin, Fight
+from app.db import utcnow
+from app.errors import conflict, not_found
+from app.models import Belt, BeltKind, BeltWin, Fight, TitleFight, TitleFightStatus, User, UserStatus
+from app.services.rating import acquire_rating_lock
 
 
 def main_belt(db: Session, lock: bool = False) -> Belt:
@@ -40,3 +42,39 @@ def award(
     db.add(win)
     db.flush()
     return win
+
+
+def award_manually(db: Session, actor: User, belt_id: int, player_id: int) -> Belt:
+    """Админ или владелец отдаёт пояс игроку без боя. Прошлый чемпион, если был, его теряет."""
+    # Чемпион основного пояса стоит над таблицей рейтинга, поэтому замок рейтинга идёт первым.
+    acquire_rating_lock(db)
+    belt = db.scalar(
+        select(Belt).where(Belt.id == belt_id).with_for_update().execution_options(populate_existing=True)
+    )
+    if belt is None:
+        raise not_found("Пояс не найден")
+    player = db.get(User, player_id)
+    if player is None:
+        raise not_found("Игрок не найден")
+    if player.status != UserStatus.ACTIVE:
+        raise conflict(f"Игрок {player.nickname} заблокирован, выдать пояс нельзя")
+    if belt.current_champion_id == player.id:
+        raise conflict(f"Пояс уже у игрока {player.nickname}")
+    if belt.kind == BeltKind.MAIN and db.scalar(
+        select(TitleFight.id).where(TitleFight.status == TitleFightStatus.SCHEDULED)
+    ):
+        raise conflict("Назначен бой за основной пояс. Сначала завершите или отмените его")
+
+    db.add(
+        BeltWin(
+            belt_id=belt.id,
+            user_id=player.id,
+            awarded_by_id=actor.id,
+            previous_champion_id=belt.current_champion_id,
+            is_defense=False,
+            won_at=utcnow(),
+        )
+    )
+    belt.current_champion_id = player.id
+    db.commit()
+    return belt

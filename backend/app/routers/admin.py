@@ -22,6 +22,7 @@ from app.models import (
 from app.schemas import (
     AdjustmentCancelIn,
     AdjustmentIn,
+    BeltAwardIn,
     BeltIn,
     CancelIn,
     PromoIn,
@@ -33,6 +34,7 @@ from app.schemas import (
 )
 from app.serializers import (
     admin_user_out,
+    belt_detail,
     belt_out,
     fight_detail,
     player_brief,
@@ -45,6 +47,7 @@ from app.serializers import (
 from app.services import (
     accounts,
     adjustments,
+    belts,
     promos,
     rating,
     special_places,
@@ -115,6 +118,11 @@ def update_belt(belt_id: int, body: BeltIn, db: Db) -> dict:
     belt.name = body.name
     db.commit()
     return belt_out(belt)
+
+
+@router.post("/belts/{belt_id}/award")
+def award_belt(belt_id: int, body: BeltAwardIn, actor: StaffUser, db: Db) -> dict:
+    return belt_detail(db, belts.award_manually(db, actor, belt_id, body.player_id))
 
 
 @router.post("/belts/{belt_id}/icon")

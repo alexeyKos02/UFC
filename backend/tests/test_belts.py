@@ -306,3 +306,78 @@ def test_home_lists_open_and_running_tournaments(admin, players):
     ids = {item["id"] for item in apis[0].get("/home").json()["tournaments"]}
     assert ids == {open_one["id"], running["id"]}
     assert draft["id"] not in ids
+
+
+def award(staff, belt, player):
+    return staff.post(f"/admin/belts/{belt['id']}/award", {"player_id": player.id})
+
+
+def test_admin_awards_belt_without_fight(admin, players):
+    (first,) = players(1)
+    belt = new_belt(admin, "Подарочный пояс")
+    response = award(admin, belt, first)
+    assert response.status_code == 200, response.text
+    assert response.json()["champion"]["id"] == first.id
+    win = response.json()["history"][0]
+    assert win["player"]["id"] == first.id
+    assert win["fight_id"] is None
+    assert win["tournament"] is None
+    assert win["title_fight_id"] is None
+
+    belts = first.profile()["belts"]
+    assert belts["active"][0]["belt"]["id"] == belt["id"]
+    assert belts["active"][0]["caption"] == "Действующий чемпион"
+
+
+def test_owner_can_award_and_player_cannot(owner, players):
+    first, second = players(2)
+    belt = new_belt(owner, "Пояс владельца")
+    assert award(owner, belt, first).status_code == 200
+    assert award(second, belt, second).status_code == 403
+    assert owner.get(f"/belts/{belt['id']}").json()["champion"]["id"] == first.id
+
+
+def test_award_moves_belt_from_previous_champion(admin, players):
+    first, second, third, fourth = players(4)
+    belt = new_belt(admin, "Стальной пояс")
+    win_tournament(admin, belt, [first, second, third, fourth], first)
+
+    assert award(admin, belt, second).status_code == 200
+    detail = admin.get(f"/belts/{belt['id']}").json()
+    assert detail["champion"]["id"] == second.id
+    assert [item["player"]["id"] for item in detail["history"]] == [second.id, first.id]
+    assert first.profile()["belts"]["active"] == []
+    assert first.profile()["belts"]["past"][0]["caption"] == "Победитель турнира за пояс „Стальной пояс“"
+
+    assert award(admin, belt, first).status_code == 200
+    second_past = second.profile()["belts"]["past"][0]
+    assert second_past["caption"] == "Бывший обладатель пояса „Стальной пояс“"
+
+
+def test_award_rejects_current_holder_and_blocked_player(owner, admin, players):
+    first, second = players(2)
+    belt = new_belt(admin)
+    assert award(admin, belt, first).status_code == 200
+    assert award(admin, belt, first).status_code == 409
+    owner.post(f"/admin/users/{second.id}/block")
+    assert award(admin, belt, second).status_code == 409
+    assert admin.post("/admin/belts/999999/award", {"player_id": first.id}).status_code == 404
+    assert len(admin.get(f"/belts/{belt['id']}").json()["history"]) == 1
+
+
+def test_awarded_main_champion_defends_in_next_title_fight(admin, players):
+    champion, challenger = players(2)
+    belt = main_belt(admin)
+    assert award(admin, belt, champion).status_code == 200
+    rows = admin.get("/players").json()
+    assert rows[0]["player"]["id"] == champion.id
+    assert rows[0]["is_champion"] is True
+
+    title_fight = schedule(admin, challenger).json()
+    assert title_fight["player1"]["id"] == champion.id
+    assert title_fight["champion_id"] == champion.id
+    assert award(admin, belt, challenger).status_code == 409
+
+    played = play_title(title_fight, challenger, champion, champion)
+    assert played["is_title_defense"] is True
+    assert main_belt(admin)["champion"]["id"] == champion.id

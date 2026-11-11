@@ -515,15 +515,21 @@ class BeltWin(Base):
         UniqueConstraint("fight_id", name="uq_belt_wins_fight"),
         UniqueConstraint("tournament_id", name="uq_belt_wins_tournament"),
         UniqueConstraint("title_fight_id", name="uq_belt_wins_title_fight"),
-        CheckConstraint("(tournament_id IS NULL) <> (title_fight_id IS NULL)", name="single_source"),
+        # Источник ровно один: турнир, титульный бой или выдача админом без боя.
+        CheckConstraint(
+            "(tournament_id IS NOT NULL)::int + (title_fight_id IS NOT NULL)::int + (awarded_by_id IS NOT NULL)::int = 1",
+            name="single_source",
+        ),
+        CheckConstraint("(fight_id IS NULL) = (awarded_by_id IS NOT NULL)", name="fight_unless_manual"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     belt_id: Mapped[int] = mapped_column(ForeignKey("belts.id"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int | None] = mapped_column(ForeignKey("fights.id"))
     tournament_id: Mapped[int | None] = mapped_column(ForeignKey("tournaments.id"))
     title_fight_id: Mapped[int | None] = mapped_column(ForeignKey("title_fights.id"))
+    awarded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     previous_champion_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     is_defense: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     won_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -531,7 +537,7 @@ class BeltWin(Base):
 
     belt: Mapped[Belt] = relationship()
     user: Mapped[User] = relationship(foreign_keys=[user_id])
-    fight: Mapped[Fight] = relationship()
+    fight: Mapped[Fight | None] = relationship()
     tournament: Mapped[Tournament | None] = relationship()
     title_fight: Mapped[TitleFight | None] = relationship()
 

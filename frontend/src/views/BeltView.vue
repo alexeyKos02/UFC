@@ -56,7 +56,7 @@ const { data, error, loading } = useLoad(() => api.get<BeltDetail>(`/belts/${pro
                   </td>
                   <td class="small">
                     <RouterLink v-if="win.tournament" class="link" :to="`/tournaments/${win.tournament.id}`">{{ win.tournament.title }}</RouterLink>
-                    <RouterLink v-else class="link" :to="`/fights/${win.fight_id}`">Титульный бой #{{ win.fight_id }}</RouterLink>
+                    <RouterLink v-else-if="win.fight_id" class="link" :to="`/fights/${win.fight_id}`">Титульный бой #{{ win.fight_id }}</RouterLink>
                   </td>
                 </tr>
               </tbody>

@@ -81,7 +81,9 @@ def belt_detail(db: Session, belt: Belt) -> dict:
     return {**belt_out(belt), "history": [_belt_win_out(win) for win in wins]}
 
 
-def past_belt_caption(belt: Belt) -> str:
+def past_belt_caption(belt: Belt, wins: list[BeltWin]) -> str:
+    if all(win.awarded_by_id for win in wins):
+        return f"Бывший обладатель пояса „{belt.name}“"
     if belt.kind == BeltKind.MAIN:
         return f"Победитель титульного боя за пояс „{belt.name}“"
     return f"Победитель турнира за пояс „{belt.name}“"
@@ -101,7 +103,7 @@ def player_belts(db: Session, user: User) -> dict:
         is_current = belt.current_champion_id == user.id
         entry = {
             "belt": belt_brief(belt),
-            "caption": "Действующий чемпион" if is_current else past_belt_caption(belt),
+            "caption": "Действующий чемпион" if is_current else past_belt_caption(belt, belt_wins),
             "wins": [_belt_win_out(win) for win in belt_wins],
         }
         (active if is_current else past).append(entry)

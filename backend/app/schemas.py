@@ -76,6 +76,10 @@ class BeltIn(BaseModel):
     name: BeltName
 
 
+class BeltAwardIn(BaseModel):
+    player_id: int
+
+
 class TitleFightIn(BaseModel):
     player1_id: int | None = None
     player2_id: int

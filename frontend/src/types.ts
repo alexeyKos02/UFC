@@ -56,7 +56,8 @@ export interface BeltWin {
   won_at: string
   player: PlayerBrief
   is_defense: boolean
-  fight_id: number
+  /** null — пояс выдан админом или владельцем без боя. */
+  fight_id: number | null
   tournament: LinkRef | null
   title_fight_id: number | null
 }
