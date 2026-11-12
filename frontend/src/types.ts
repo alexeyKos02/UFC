@@ -140,6 +140,11 @@ export interface RatingChange {
   loss_discount: number
   points_after: number
   place_after: number
+  /** Номер в таблице рейтинга до и после боя. У чемпиона номера нет: null и champion_* = true. */
+  table_place_before: number | null
+  table_place_after: number | null
+  champion_before: boolean
+  champion_after: boolean
 }
 
 export interface FightAdjustment {
@@ -386,3 +391,21 @@ export interface SpecialPlaceLogRow {
 
 /** Вид заготовки, которую показывает StateBlock во время загрузки. */
 export type SkeletonKind = 'table' | 'league' | 'cards' | 'list' | 'profile' | 'fight' | 'form'
+
+/** Точка истории игрока: очки и номер в таблице после одного боя. */
+export interface RatingHistoryPoint {
+  fight_id: number
+  kind: FightKind
+  fought_at: string
+  confirmed_at: string
+  won: boolean
+  opponent: PlayerBrief
+  delta: number
+  points_before: number
+  points_after: number
+  /** Номер в таблице; у чемпиона null и champion_* = true. */
+  table_place_before: number | null
+  table_place_after: number | null
+  champion_before: boolean
+  champion_after: boolean
+}

@@ -5,7 +5,7 @@ import FightActions from './FightActions.vue'
 import FighterPhoto from './FighterPhoto.vue'
 import StatusBadge from './StatusBadge.vue'
 import { boutCaption, formatBoutDate, formatDateTime, methodLabel, resultLine, signed } from '../format'
-import type { FightDetail } from '../types'
+import type { FightDetail, RatingChange } from '../types'
 
 const props = defineProps<{ fight: FightDetail; collapsible?: boolean }>()
 const emit = defineEmits<{ changed: []; collapse: [] }>()
@@ -30,6 +30,18 @@ function row(label: string, values: [number, number], format: (value: number) =>
   }
 }
 
+/** Номер в таблице рейтинга, как его видели игроки; у чемпиона вместо номера подпись. */
+function tablePlace(change: RatingChange, moment: 'before' | 'after'): string {
+  const champion = moment === 'before' ? change.champion_before : change.champion_after
+  if (champion) return 'Чемпион'
+  const place = moment === 'before' ? change.table_place_before : change.table_place_after
+  return place === null ? '—' : `№${place}`
+}
+
+function placeRow(label: string, texts: [string, string]): DuelRow {
+  return { label, left: 0, right: 0, leftText: texts[0], rightText: texts[1], hasBar: false }
+}
+
 const caption = computed(() => {
   const base = boutCaption[props.fight.kind]
   return props.fight.is_title_defense ? `${base} · Защита пояса` : base
@@ -41,8 +53,8 @@ const duels = computed<DuelRow[]>(() => {
   const first = fight.rating_changes.find((change) => change.player.id === fight.player1.id)
   const second = fight.rating_changes.find((change) => change.player.id === fight.player2.id)
   if (first && second) {
-    rows.push(row('Место до боя', [first.place_before, second.place_before], (place) => `№${place}`, false))
-    rows.push(row('Место после боя', [first.place_after, second.place_after], (place) => `№${place}`, false))
+    rows.push(placeRow('Место до боя', [tablePlace(first, 'before'), tablePlace(second, 'before')]))
+    rows.push(placeRow('Место после боя', [tablePlace(first, 'after'), tablePlace(second, 'after')]))
     rows.push(row('Очки до боя', [first.points_before, second.points_before]))
     if (fight.adjustment) {
       rows.push(row('Ручная корректировка', [manual(fight.player1.id), manual(fight.player2.id)], signed))

@@ -1,10 +1,11 @@
 from fastapi import APIRouter, UploadFile
-from sqlalchemy import select
+from sqlalchemy import case, select
+from sqlalchemy.orm import aliased
 
 from app.db import utcnow
 from app.deps import CurrentUser, Db
 from app.errors import not_found
-from app.models import User, UserStatus
+from app.models import Fight, FightStatus, RatingChange, User, UserStatus
 from app.schemas import ProfileIn
 from app.serializers import (
     account_out,
@@ -79,6 +80,44 @@ def player_fights(player_id: int, viewer: CurrentUser, db: Db) -> list[dict]:
         raise not_found("Игрок не найден")
     fights = stats.confirmed_fights_of(db, player_id)
     return [fight_brief(fight, viewer) for fight in reversed(fights)]
+
+
+@router.get("/players/{player_id}/rating-history")
+def rating_history(player_id: int, _: CurrentUser, db: Db) -> dict:
+    """Очки и номер в таблице после каждого боя игрока, по порядку подтверждения — для графиков в профиле."""
+    if db.get(User, player_id) is None:
+        raise not_found("Игрок не найден")
+    opponent = aliased(User)
+    rows = db.execute(
+        select(RatingChange, Fight, opponent)
+        .join(Fight, Fight.id == RatingChange.fight_id)
+        # Соперник — тот из пары, чьё это не начисление.
+        .join(
+            opponent,
+            opponent.id == case((Fight.player1_id == RatingChange.player_id, Fight.player2_id), else_=Fight.player1_id),
+        )
+        .where(RatingChange.player_id == player_id, Fight.status == FightStatus.CONFIRMED)
+        .order_by(Fight.confirmed_at, Fight.id)
+    ).all()
+    points = [
+        {
+            "fight_id": fight.id,
+            "kind": fight.kind.value,
+            "fought_at": fight.fought_at,
+            "confirmed_at": fight.confirmed_at,
+            "won": fight.winner_id == player_id,
+            "opponent": player_brief(rival),
+            "delta": change.delta,
+            "points_before": change.points_before,
+            "points_after": change.points_after,
+            "table_place_before": change.table_place_before,
+            "table_place_after": change.table_place_after,
+            "champion_before": change.champion_before,
+            "champion_after": change.champion_after,
+        }
+        for change, fight, rival in rows
+    ]
+    return {"points": points}
 
 
 @router.patch("/me/profile")

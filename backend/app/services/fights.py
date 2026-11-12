@@ -95,6 +95,8 @@ def _finalize(db: Session, fight: Fight) -> None:
         .execution_options(populate_existing=True)
     ).all()
     by_id = {player.id: player for player in players}
+    # Номер в таблице «после боя» берётся, когда учтено всё: очки, сам бой и смена чемпиона или приз турнира.
+    places_before = rating.table_places(db)
     rating.apply_fight_rating(db, fight, by_id[fight.winner_id], by_id[fight.loser_id], now)
     fight.status = FightStatus.CONFIRMED
     fight.confirmed_at = now
@@ -103,6 +105,8 @@ def _finalize(db: Session, fight: Fight) -> None:
         tournaments.on_fight_confirmed(db, fight)
     elif fight.kind == FightKind.TITLE:
         title_fights.on_fight_confirmed(db, fight)
+    db.flush()
+    rating.record_table_places(db, fight, places_before)
 
 
 def dispute(db: Session, actor: User, fight_id: int, version_no: int, reason: str) -> Fight:

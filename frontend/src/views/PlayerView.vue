@@ -8,12 +8,13 @@ import ChampionMark from '../components/ChampionMark.vue'
 import FightCard from '../components/FightCard.vue'
 import HeadToHead from '../components/HeadToHead.vue'
 import PlayerChip from '../components/PlayerChip.vue'
+import RatingChart from '../components/RatingChart.vue'
 import SkeletonBlock from '../components/SkeletonBlock.vue'
 import StateBlock from '../components/StateBlock.vue'
 import WinLossBar from '../components/WinLossBar.vue'
 import { useAction, useLoad } from '../feedback'
 import { formatDate, plural, tierLabel } from '../format'
-import type { Account, FightBrief, PlayerProfile } from '../types'
+import type { Account, FightBrief, PlayerProfile, RatingHistoryPoint } from '../types'
 
 const HISTORY_PAGE = 10
 
@@ -21,6 +22,17 @@ const props = defineProps<{ id: string }>()
 const { data, error, loading, reload } = useLoad(() => api.get<PlayerProfile>(`/players/${props.id}`))
 const history = useLoad(() => api.get<FightBrief[]>(`/players/${props.id}/fights`))
 const visibleFights = ref(HISTORY_PAGE)
+
+const ratingHistory = useLoad(() => api.get<{ points: RatingHistoryPoint[] }>(`/players/${props.id}/rating-history`))
+const chartMode = ref<'points' | 'place'>('points')
+const chartPeriod = ref<'month' | 'all'>('all')
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000
+const chartHistory = computed(() => {
+  const all = ratingHistory.data.value?.points ?? []
+  if (chartPeriod.value === 'all') return all
+  const since = Date.now() - MONTH_MS
+  return all.filter((item) => new Date(item.confirmed_at).getTime() >= since)
+})
 
 type ResultFilter = 'all' | 'wins' | 'losses'
 const result = ref<ResultFilter>('all')
@@ -203,6 +215,25 @@ async function upload(event: Event, path: string): Promise<void> {
                 </ul>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section v-if="ratingHistory.data.value?.points.length" class="section">
+          <h2>Динамика</h2>
+          <div class="card stack">
+            <div class="chart-controls">
+              <div class="filter-chips" role="group" aria-label="Что показать">
+                <button type="button" :aria-pressed="chartMode === 'points'" @click="chartMode = 'points'">Очки</button>
+                <button type="button" :aria-pressed="chartMode === 'place'" @click="chartMode = 'place'">Место</button>
+              </div>
+              <div class="filter-chips" role="group" aria-label="Период">
+                <button type="button" :aria-pressed="chartPeriod === 'month'" @click="chartPeriod = 'month'">30 дней</button>
+                <button type="button" :aria-pressed="chartPeriod === 'all'" @click="chartPeriod = 'all'">Всё время</button>
+              </div>
+            </div>
+            <RatingChart v-if="chartHistory.length" :history="chartHistory" :mode="chartMode" />
+            <p v-else class="small muted">За последние 30 дней боёв не было.</p>
+            <p class="small muted">{{ chartMode === 'points' ? 'Очки после каждого боя.' : 'Место в таблице рейтинга после каждого боя.' }} Наведите или нажмите на график, чтобы увидеть бой.</p>
           </div>
         </section>
 

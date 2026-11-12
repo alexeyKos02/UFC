@@ -109,6 +109,13 @@ export function formatBoutDate(value: string): string {
   return numericDateTime.format(new Date(value))
 }
 
+const shortDate = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' })
+
+/** «13.11» — подписи на осях графиков. */
+export function formatShortDate(value: string): string {
+  return shortDate.format(new Date(value))
+}
+
 export function formatDate(value: string | null): string {
   return value ? dateOnly.format(new Date(value)) : '—'
 }

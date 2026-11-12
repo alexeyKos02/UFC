@@ -424,7 +424,12 @@ class FightConfirmation(Base):
 
 
 class RatingChange(Base):
-    """Автоматическое начисление: снимок места и очков игрока до расчёта и итог."""
+    """Автоматическое начисление: снимок места и очков игрока до расчёта и итог.
+
+    place_before/place_after — место по очкам (равные очки делят место), по нему ищутся апсеты.
+    table_place_* — номер в таблице рейтинга, который видят игроки: с чемпионом над таблицей,
+    калибровкой и спецместами. У чемпиона номера нет: table_place пустой, champion_* = true.
+    """
 
     __tablename__ = "rating_changes"
     __table_args__ = (UniqueConstraint("fight_id", "player_id", name="uq_rating_change_fight_player"),)
@@ -439,6 +444,10 @@ class RatingChange(Base):
     loss_discount: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     points_after: Mapped[int] = mapped_column(Integer)
     place_after: Mapped[int] = mapped_column(Integer)
+    table_place_before: Mapped[int | None] = mapped_column(Integer)
+    table_place_after: Mapped[int | None] = mapped_column(Integer)
+    champion_before: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    champion_after: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = created_at_column()
 
     fight: Mapped[Fight] = relationship(back_populates="rating_changes")

@@ -210,6 +210,10 @@ def _rating_change_out(change) -> dict:
         "loss_discount": change.loss_discount,
         "points_after": change.points_after,
         "place_after": change.place_after,
+        "table_place_before": change.table_place_before,
+        "table_place_after": change.table_place_after,
+        "champion_before": change.champion_before,
+        "champion_after": change.champion_after,
     }
 
 

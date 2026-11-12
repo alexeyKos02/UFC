@@ -346,6 +346,23 @@ def rating_table(db: Session) -> list[RatingRow]:
     return rows
 
 
+TablePlace = tuple[int | None, bool]
+
+
+def table_places(db: Session) -> dict[int, TablePlace]:
+    """Номер каждого активного игрока в таблице и признак чемпиона (у чемпиона номера нет)."""
+    return {row.user.id: (row.display_place, row.is_champion) for row in rating_table(db)}
+
+
+def record_table_places(db: Session, fight: Fight, before: dict[int, TablePlace]) -> None:
+    """Запоминает в начислениях боя номера в таблице до боя и после всех его последствий."""
+    after = table_places(db)
+    for change in db.scalars(select(RatingChange).where(RatingChange.fight_id == fight.id)):
+        change.table_place_before, change.champion_before = before.get(change.player_id, (None, False))
+        change.table_place_after, change.champion_after = after.get(change.player_id, (None, False))
+    db.flush()
+
+
 def rating_row_for(db: Session, user: User) -> RatingRow | None:
     if user.status != UserStatus.ACTIVE:
         return None
