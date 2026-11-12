@@ -233,7 +233,13 @@ async function upload(event: Event, path: string): Promise<void> {
             </div>
             <RatingChart v-if="chartHistory.length" :history="chartHistory" :mode="chartMode" />
             <p v-else class="small muted">За последние 30 дней боёв не было.</p>
-            <p class="small muted">{{ chartMode === 'points' ? 'Очки после каждого боя.' : 'Место в таблице рейтинга после каждого боя.' }} Наведите или нажмите на график, чтобы увидеть бой.</p>
+            <p class="small muted">
+              {{ chartMode === 'points' ? 'Очки после каждого боя.' : 'Место в таблице рейтинга после каждого боя.' }}
+              <template v-if="chartHistory.some((item) => item.champion_after || item.champion_before)">
+                <span class="chart-legend-champion" aria-hidden="true"></span> — с поясом чемпиона.
+              </template>
+              Масштаб: «+ / −», Ctrl + колесо или двумя пальцами.
+            </p>
           </div>
         </section>
 

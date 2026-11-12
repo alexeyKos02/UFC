@@ -1800,6 +1800,30 @@ th.num {
 .rating-chart svg {
   display: block;
   overflow: visible;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.rating-chart.zoomed svg {
+  cursor: grab;
+}
+
+.rating-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chart-zoom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.chart-zoom .btn {
+  min-width: 36px;
 }
 
 .chart-grid line {
@@ -1812,6 +1836,24 @@ th.num {
   fill: var(--text-3);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.chart-champion {
+  fill: var(--gold);
+  opacity: 0.12;
+}
+
+.chart-crown {
+  fill: var(--gold);
+}
+
+.chart-legend-champion {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--gold) 35%, transparent);
+  vertical-align: -1px;
 }
 
 .chart-line {
