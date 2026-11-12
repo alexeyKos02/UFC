@@ -435,11 +435,30 @@ class RatingChange(Base):
     place_before: Mapped[int] = mapped_column(Integer)
     points_before: Mapped[int] = mapped_column(Integer)
     delta: Mapped[int] = mapped_column(Integer)
+    # Только у проигравшего: на сколько меньше он потерял благодаря скидке за активность.
+    loss_discount: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     points_after: Mapped[int] = mapped_column(Integer)
     place_after: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = created_at_column()
 
     fight: Mapped[Fight] = relationship(back_populates="rating_changes")
+    player: Mapped[User] = relationship()
+
+
+class RatingDecay(Base):
+    """Снятие очков за неделю простоя. due_at — срок, от которого снятие отсчитано."""
+
+    __tablename__ = "rating_decays"
+    __table_args__ = (UniqueConstraint("player_id", "due_at", name="uq_rating_decays_player_due"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    player_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    points_before: Mapped[int] = mapped_column(Integer)
+    delta: Mapped[int] = mapped_column(Integer)
+    points_after: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = created_at_column()
+
     player: Mapped[User] = relationship()
 
 

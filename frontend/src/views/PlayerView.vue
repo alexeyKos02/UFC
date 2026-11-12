@@ -12,7 +12,7 @@ import SkeletonBlock from '../components/SkeletonBlock.vue'
 import StateBlock from '../components/StateBlock.vue'
 import WinLossBar from '../components/WinLossBar.vue'
 import { useAction, useLoad } from '../feedback'
-import { formatDate, tierLabel } from '../format'
+import { formatDate, plural, tierLabel } from '../format'
 import type { Account, FightBrief, PlayerProfile } from '../types'
 
 const HISTORY_PAGE = 10
@@ -27,6 +27,14 @@ const nickname = ref('')
 watch(data, (value) => {
   if (value) nickname.value = value.player.nickname
 })
+
+function inactivityLine(info: NonNullable<PlayerProfile['rating']['inactivity']>): string {
+  const days = `${info.days_without_fights} ${plural(info.days_without_fights, ['день', 'дня', 'дней'])}`
+  if (info.lost_points > 0) {
+    return `Без боёв ${days}: за простой снято ${info.lost_points} ${plural(info.lost_points, ['очко', 'очка', 'очков'])}. Каждую неделю снимается 3% от очков сверх 1000, пока не будет боя.`
+  }
+  return `Без боёв ${days}. С ${formatDate(info.decay_starts_at)} каждую неделю будет сниматься 3% от очков сверх 1000, пока не будет боя.`
+}
 
 async function saveNickname(): Promise<void> {
   const account = await run(() => api.patch<Account>('/me/profile', { nickname: nickname.value }), 'Ник обновлён')
@@ -81,6 +89,13 @@ async function upload(event: Event, path: string): Promise<void> {
               <div class="tile"><b>{{ data.rating.points }}</b><span>Очки</span></div>
               <div class="tile"><b>{{ data.stats.best_streak }}</b><span>Лучшая серия</span></div>
             </div>
+
+            <p v-if="data.rating.is_calibrating" class="small muted">
+              Калибровка: меньше 5 боёв. В таблице игрок стоит ниже остальных, пока не сыграет пятый бой.
+            </p>
+            <p v-if="data.rating.inactivity" class="small tone-amber">
+              {{ inactivityLine(data.rating.inactivity) }}
+            </p>
 
             <WinLossBar :wins="data.stats.wins" :losses="data.stats.losses" :win-rate="data.stats.win_rate" />
 

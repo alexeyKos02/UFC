@@ -1,13 +1,51 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
+
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.db import SessionLocal
 from app.errors import AppError
 from app.routers import admin, auth, fights, players, public, tournaments
+from app.services import rating
 
-app = FastAPI(title="Лига игроков UFC", docs_url="/api/docs", openapi_url="/api/openapi.json")
+log = logging.getLogger("app")
+INACTIVITY_CHECK_SECONDS = 3600
+
+
+def _apply_inactivity() -> None:
+    with SessionLocal() as db:
+        applied = rating.apply_inactivity(db)
+    if applied:
+        log.info("Снято очков за простой: %s раз", applied)
+
+
+async def _inactivity_loop() -> None:
+    """Раз в час снимает очки за наступившие недели простоя. Снятие идемпотентно, пропуски догоняются."""
+    while True:
+        try:
+            await asyncio.to_thread(_apply_inactivity)
+        except Exception:
+            log.exception("Не удалось применить правило простоя")
+        await asyncio.sleep(INACTIVITY_CHECK_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    task = asyncio.create_task(_inactivity_loop())
+    yield
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+app = FastAPI(
+    title="Лига игроков UFC", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan
+)
 
 FIELD_LABELS = {
     "login": "Логин",

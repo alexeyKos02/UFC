@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from app.services.rating import elo_delta
+from tests.conftest import expected_gain
 from tests.conftest import confirm, create_fight, ladder, play
 
 
@@ -29,9 +29,11 @@ def test_adjustment_add_change_and_cancel(admin, players):
     assert top.points() == top_start - 2
 
     autos = {item["player"]["id"]: item for item in created.json()["rating_changes"]}
-    upset_gain = elo_delta(autos[bottom.id]["points_before"], autos[top.id]["points_before"])
+    upset_gain = expected_gain(autos[bottom.id]["points_before"], autos[top.id]["points_before"])
     assert upset_gain > 20
-    assert {player_id: item["delta"] for player_id, item in autos.items()} == {bottom.id: upset_gain, top.id: -upset_gain}
+    assert autos[bottom.id]["delta"] == upset_gain
+    # Проигравший получил скидку за активность и потерял меньше.
+    assert -upset_gain < autos[top.id]["delta"] < 0
 
     changed = admin.put(url, body(bottom, 3, version=1, reason="Пересмотр"))
     assert changed.json()["adjustment"]["winner_delta"] == 3
@@ -169,10 +171,10 @@ def test_special_place_scenario_from_spec(admin, players):
 
     top_before, fourth_before = top.points(), fourth.points()
     play(fourth, top, fourth)
-    gain = elo_delta(fourth_before, top_before)
+    gain = expected_gain(fourth_before, top_before)
     assert gain > 20
     assert fourth.points() == fourth_before + gain
-    assert top.points() == top_before - gain
+    assert top_before - gain < top.points() < top_before
 
     other = apis[1]
     taken = admin.put(f"/admin/rating/special-places/{other.id}", {"place": 1})
@@ -214,7 +216,7 @@ def test_special_place_marker_is_visible_only_to_staff(owner, admin, players):
 def test_remaining_players_fill_free_numbers(admin, players):
     first, second, third, fourth, fifth = players(5)
     play(first, second, first)
-    # Очки: first 1020, admin/third/fourth/fifth 1000, second 980. Спецместо №2 у игрока second.
+    # Очки: first 1024, admin/third/fourth/fifth 1000, second 982. Спецместо №2 у игрока second.
     assert admin.put(f"/admin/rating/special-places/{second.id}", {"place": 2}).status_code == 200
     rows = {row["player"]["id"]: row for row in first.get("/players").json()}
     order = (first, second, admin, third, fourth, fifth)

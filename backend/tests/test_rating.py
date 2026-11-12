@@ -4,25 +4,28 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.rating import break_tie, elo_delta, expected_score
-from tests.conftest import FIGHT_TIME, confirm, create_fight, ladder, play, set_points
+from app.services.rating import K_EXPERIENCED, K_NEW, break_tie, expected_score, fight_points
+from tests.conftest import FIGHT_TIME, confirm, create_fight, expected_gain, ladder, play, set_points
 
 
 @pytest.mark.parametrize(
-    ("winner_points", "loser_points", "expected"),
+    ("winner_points", "loser_points", "winner_k", "loser_k", "discounted", "gain", "loss"),
     [
-        (1000, 1000, 20),
-        (1000, 1100, 26),
-        (900, 1100, 30),
-        (600, 1000, 36),
-        (1100, 1000, 14),
-        (1100, 900, 10),
-        (1000, 600, 4),
-        (2500, 500, 1),
+        (1000, 1000, K_EXPERIENCED, K_EXPERIENCED, True, 16, 12),
+        (1000, 1000, K_EXPERIENCED, K_EXPERIENCED, False, 16, 16),
+        (1000, 1000, K_NEW, K_NEW, True, 24, 18),
+        (1000, 1000, K_NEW, K_EXPERIENCED, True, 24, 12),
+        (1000, 1200, K_EXPERIENCED, K_EXPERIENCED, True, 24, 18),
+        (1200, 1000, K_EXPERIENCED, K_EXPERIENCED, True, 8, 6),
+        (1100, 1000, K_EXPERIENCED, K_EXPERIENCED, True, 12, 9),
+        (2500, 500, K_EXPERIENCED, K_EXPERIENCED, True, 1, 1),
     ],
 )
-def test_elo_delta_table(winner_points, loser_points, expected):
-    assert elo_delta(winner_points, loser_points) == expected
+def test_fight_points_table(winner_points, loser_points, winner_k, loser_k, discounted, gain, loss):
+    result = fight_points(winner_points, loser_points, winner_k, loser_k, discounted)
+    assert (result.gain, result.loss) == (gain, loss)
+    full = fight_points(winner_points, loser_points, winner_k, loser_k, False).loss
+    assert result.loss_discount == full - loss
 
 
 def test_expected_scores_sum_to_one():
@@ -106,7 +109,7 @@ def test_fights_with_players_outside_the_tie_are_ignored():
     assert break_tie([first, second], [(first.id, outsider_id, None)]) == [second, first]
 
 
-def test_underdog_win_uses_elo_and_keeps_total(players):
+def test_underdog_win_uses_elo_and_discounted_loss(players):
     apis = players(4)
     ladder(apis)
     top, _, _, bottom = apis
@@ -115,19 +118,21 @@ def test_underdog_win_uses_elo_and_keeps_total(players):
 
     top_before, bottom_before = top.points(), bottom.points()
     fight = play(bottom, top, bottom)
-    gain = elo_delta(bottom_before, top_before)
-    assert gain > 20
-    assert bottom.points() == bottom_before + gain
-    assert top.points() == top_before - gain
-    assert bottom.points() + top.points() == top_before + bottom_before
+    expected = fight_points(bottom_before, top_before, K_NEW, K_NEW, True)
+    assert expected.gain > 24
+    assert bottom.points() == bottom_before + expected.gain
+    assert top.points() == top_before - expected.loss
+    assert expected.loss < expected.gain
 
     changes = {item["player"]["id"]: item for item in fight["rating_changes"]}
     assert changes[bottom.id]["place_before"] == 4
     assert changes[bottom.id]["points_before"] == bottom_before
-    assert changes[bottom.id]["delta"] == gain
-    assert changes[bottom.id]["points_after"] == bottom_before + gain
+    assert changes[bottom.id]["delta"] == expected.gain
+    assert changes[bottom.id]["loss_discount"] == 0
+    assert changes[bottom.id]["points_after"] == bottom_before + expected.gain
     assert changes[top.id]["place_before"] == 1
-    assert changes[top.id]["delta"] == -gain
+    assert changes[top.id]["delta"] == -expected.loss
+    assert changes[top.id]["loss_discount"] == expected.loss_discount > 0
 
 
 def test_favorite_win_gives_less_than_even_fight(players):
@@ -137,8 +142,8 @@ def test_favorite_win_gives_less_than_even_fight(players):
     top_before, bottom_before = top.points(), bottom.points()
     play(top, bottom, top)
     gain = top.points() - top_before
-    assert gain == elo_delta(top_before, bottom_before)
-    assert 1 <= gain < 20
+    assert gain == expected_gain(top_before, bottom_before)
+    assert 1 <= gain < 24
 
 
 def test_beating_the_same_weak_player_brings_less_and_less(players):
@@ -149,9 +154,60 @@ def test_beating_the_same_weak_player_brings_less_and_less(players):
         play(strong, weak, strong, FIGHT_TIME + timedelta(hours=hour))
         gains.append(strong.points() - before)
     assert gains == sorted(gains, reverse=True)
-    assert gains[0] == 20
+    assert gains[0] == 24
     assert gains[-1] < 10
-    assert weak.points() + strong.points() == 2000
+
+
+def test_discount_works_for_two_losses_to_the_same_opponent_per_week(players):
+    first, second = players(2)
+    losses = []
+    for _ in range(3):
+        fight = play(first, second, first)
+        change = next(item for item in fight["rating_changes"] if item["player"]["id"] == second.id)
+        losses.append(change["loss_discount"])
+    assert losses[0] > 0 and losses[1] > 0
+    assert losses[2] == 0
+
+    # Другой соперник — своя пара скидок.
+    third = players(1, prefix="other")[0]
+    fight = play(third, second, third)
+    assert next(item for item in fight["rating_changes"] if item["player"]["id"] == second.id)["loss_discount"] > 0
+
+
+def test_discount_returns_after_a_week(players):
+    from app.db import SessionLocal
+    from app.models import Fight
+
+    first, second = players(2)
+    for _ in range(2):
+        play(first, second, first)
+    with SessionLocal() as db:
+        db.query(Fight).update({Fight.confirmed_at: Fight.confirmed_at - timedelta(days=7, minutes=1)})
+        db.commit()
+    fight = play(first, second, first)
+    assert next(item for item in fight["rating_changes"] if item["player"]["id"] == second.id)["loss_discount"] > 0
+
+
+def test_k_drops_after_ten_fights(players):
+    veteran, sparring, fresh = players(3)
+    for hour in range(10):
+        play(veteran, sparring, sparring if hour % 2 else veteran, FIGHT_TIME + timedelta(hours=hour))
+    set_points([veteran, fresh])
+    before = veteran.points()
+    fight = play(veteran, fresh, veteran)
+    assert veteran.points() - before == fight_points(1000, 1000, K_EXPERIENCED, K_NEW, True).gain == 16
+    loser = next(item for item in fight["rating_changes"] if item["player"]["id"] == fresh.id)
+    assert loser["delta"] == -18
+
+
+def test_activity_lets_an_even_player_grow(players):
+    """Игрок, который побеждает в половине боёв против равных, растёт благодаря скидке."""
+    first, second, third, fourth = players(4)
+    pairs = [(first, second), (third, fourth), (first, third), (second, fourth)]
+    for index, (one, other) in enumerate(pairs):
+        play(one, other, one if index % 2 else other)
+        play(one, other, other if index % 2 else one)
+    assert all(api.points() > 1000 for api in (first, second, third, fourth))
 
 
 def test_new_registration_shares_starting_points(players):
@@ -182,8 +238,6 @@ def test_parallel_final_confirmations_use_sequential_state(players):
     for previous, current in zip(snapshots, snapshots[1:], strict=False):
         assert current["points_before"] == previous["points_after"]
     assert hub.points() == snapshots[-1]["points_after"]
-    total = sum(api.points() for api in apis)
-    assert total == 1000 * len(apis)
 
 
 def test_database_rejects_second_rating_change_for_same_fight(players):

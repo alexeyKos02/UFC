@@ -125,7 +125,7 @@ def test_unblock_restores_place_and_access(owner, players):
     relogin = Api(first.login)
     response = relogin.post("/auth/login", {"login": first.login, "password": PASSWORD})
     assert response.status_code == 200
-    assert response.json()["rating_points"] == 1020
+    assert response.json()["rating_points"] == 1024
     assert relogin.get(f"/players/{first.id}").json()["rating"]["display_place"] == 1
 
 

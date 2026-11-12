@@ -6,7 +6,7 @@ import Modal from '../../components/Modal.vue'
 import StateBlock from '../../components/StateBlock.vue'
 import StatusBadge from '../../components/StatusBadge.vue'
 import { useAction, useLoad } from '../../feedback'
-import { seatsLine } from '../../format'
+import { recommendedTournamentPoints, seatsLine } from '../../format'
 import type { Belt, TournamentCard } from '../../types'
 
 const list = useLoad(() => api.get<TournamentCard[]>('/admin/tournaments'))
@@ -14,11 +14,12 @@ const belts = useLoad(() => api.get<Belt[]>('/belts'))
 const { busy, run } = useAction()
 
 const tournamentBelts = computed(() => (belts.data.value ?? []).filter((belt) => belt.kind === 'tournament'))
-const emptyForm = { title: '', description: '', capacity: 8, win_points: 10, belt_id: 0 }
+const emptyForm = { title: '', description: '', capacity: 8, win_points: recommendedTournamentPoints(8), belt_id: 0 }
 const form = reactive({ ...emptyForm })
 const editingId = ref<number | null>(null)
 const cancelling = ref<TournamentCard | null>(null)
 const reason = ref('')
+const recommendedPoints = computed(() => recommendedTournamentPoints(form.capacity || 2))
 
 function edit(item: TournamentCard): void {
   editingId.value = item.id
@@ -75,7 +76,13 @@ async function cancel(): Promise<void> {
       <div class="field-grid">
         <label class="field">Название<input v-model="form.title" required maxlength="120" /></label>
         <label class="field">Лимит участников<input v-model.number="form.capacity" type="number" min="2" max="128" required /></label>
-        <label class="field">Очки за победу в турнире<input v-model.number="form.win_points" type="number" min="0" max="100000" step="1" required /></label>
+        <div class="stack" style="gap: 6px">
+          <label class="field">Очки за победу в турнире<input v-model.number="form.win_points" type="number" min="0" max="100000" step="1" required /></label>
+          <p class="small muted" style="margin: 0">
+            Рекомендуем {{ recommendedPoints }}: по 10 очков за каждый круг сетки. Бои турнира и так дают очки по Elo.
+          </p>
+          <button v-if="form.win_points !== recommendedPoints" class="btn sm" type="button" style="align-self: flex-start" @click="form.win_points = recommendedPoints">Поставить {{ recommendedPoints }}</button>
+        </div>
         <label class="field">
           Турнирный пояс
           <select v-model.number="form.belt_id" required>

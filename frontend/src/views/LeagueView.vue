@@ -25,6 +25,7 @@ onUnmounted(() => window.clearTimeout(timer))
 // Афиша чемпиона стоит над таблицей, пока не идёт поиск. При поиске чемпион — обычная строка с короной.
 const champion = computed(() => (search.value.trim() ? undefined : data.value?.find((row) => row.is_champion && row.belt)))
 const rows = computed(() => (champion.value ? data.value?.filter((row) => row !== champion.value) : data.value) ?? [])
+const hasCalibrating = computed(() => rows.value.some((row) => row.is_calibrating))
 </script>
 
 <template>
@@ -86,6 +87,7 @@ const rows = computed(() => (champion.value ? data.value?.filter((row) => row !=
                 <div class="row" style="gap: 6px">
                   <PlayerChip :player="row.player" />
                   <span v-if="row.is_special" class="badge plain tone-gold">Спецместо</span>
+                  <span v-if="row.is_calibrating" class="badge plain muted" title="Меньше 5 боёв">Калибровка</span>
                 </div>
               </td>
               <td class="num">{{ row.points }}</td>
@@ -98,6 +100,7 @@ const rows = computed(() => (champion.value ? data.value?.filter((row) => row !=
           </tbody>
         </table>
         </div>
+        <p v-if="hasCalibrating" class="small muted board-note">Калибровка — меньше 5 боёв. Такие игроки стоят ниже остальных, пока не сыграют пятый бой.</p>
       </div>
       <p v-else class="empty">{{ search ? 'Игроки с таким ником не найдены.' : 'В лиге пока нет активных игроков.' }}</p>
     </StateBlock>

@@ -262,3 +262,10 @@ def finish_tournament(staff: Api, participants: list[Api], tournament_id: int, c
         pair = [match["player1"]["id"], match["player2"]["id"]]
         winner_id = champion.id if champion and champion.id in pair else pair[0]
         play_match(by_id, match, winner_id)
+
+
+def expected_gain(winner_points: int, loser_points: int, winner_k: int | None = None) -> int:
+    """Очки победителя по Elo. По умолчанию K новичка: в тестах у игроков меньше 10 боёв."""
+    from app.services.rating import K_NEW, fight_points
+
+    return fight_points(winner_points, loser_points, winner_k or K_NEW, K_NEW, False).gain

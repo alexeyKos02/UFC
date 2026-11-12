@@ -15,6 +15,13 @@ export const tierLabel: Record<RatingTier, string> = {
   top: 'Топ',
   middle: 'Ни бе ни ме',
   bottom: 'Играть научись',
+  calibration: 'Калибровка',
+}
+
+/** Сколько очков рекомендуем за победу в турнире: по 10 за каждый круг сетки. */
+export function recommendedTournamentPoints(capacity: number): number {
+  const rounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, capacity))))
+  return rounds * 10
 }
 
 export const fightStatusLabel: Record<FightStatus, string> = {

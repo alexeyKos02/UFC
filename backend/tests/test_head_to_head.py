@@ -33,7 +33,9 @@ def test_head_to_head_from_both_sides(players):
     theirs = h2h(rival, me)
     assert (theirs["my_wins"], theirs["their_wins"]) == (1, 3)
     assert theirs["streak"] == {"mine": False, "count": 2}
-    assert theirs["points"] == -mine["points"]
+    # Со скидкой за активность проигравший теряет меньше, чем получает победитель.
+    assert theirs["points"] == rival.points() - 1000
+    assert theirs["points"] > -mine["points"]
 
 
 def test_no_head_to_head_on_own_profile_and_before_first_fight(players):
@@ -62,7 +64,7 @@ def test_recent_shows_last_five(players):
 
 def test_points_include_manual_adjustment(admin, players):
     top, bottom, upset, _ = upset_setup(players)
-    before = h2h(bottom, top)["points"]
+    before, top_before = h2h(bottom, top)["points"], h2h(top, bottom)["points"]
     assert admin.put(f"/admin/rating/adjustments/{upset['id']}", body(bottom, 20)).status_code == 200
     assert h2h(bottom, top)["points"] == before + 20
-    assert h2h(top, bottom)["points"] == -(before + 20)
+    assert h2h(top, bottom)["points"] == top_before - 20

@@ -64,6 +64,8 @@ const duels = computed<DuelRow[]>(() => {
   return rows
 })
 
+const discount = computed(() => props.fight.rating_changes.find((change) => change.loss_discount > 0))
+
 function positive(value: number): number {
   return Math.max(0, value)
 }
@@ -122,6 +124,9 @@ function positive(value: number): number {
           </div>
         </div>
 
+        <p v-if="discount && !hidePoints" class="preview">
+          Скидка за активность: {{ discount.player.nickname }} потерял {{ -discount.delta }} вместо {{ discount.loss_discount - discount.delta }}.
+        </p>
         <p v-if="fight.adjustment && !hidePoints" class="preview">Причина ручной корректировки: {{ fight.adjustment.reason }}</p>
 
         <details class="bout-versions" :open="fight.versions.length > 1">

@@ -1,5 +1,5 @@
 export type Role = 'player' | 'admin' | 'owner'
-export type RatingTier = 'top' | 'middle' | 'bottom'
+export type RatingTier = 'top' | 'middle' | 'bottom' | 'calibration'
 export type FightStatus = 'pending' | 'disputed' | 'confirmed' | 'cancelled'
 export type FightKind = 'regular' | 'tournament' | 'title'
 export type FightMethod = 'ko_tko' | 'submission' | 'decision'
@@ -136,6 +136,8 @@ export interface RatingChange {
   place_before: number
   points_before: number
   delta: number
+  /** Только у проигравшего: на сколько меньше он потерял благодаря скидке за активность. */
+  loss_discount: number
   points_after: number
   place_after: number
 }
@@ -264,6 +266,8 @@ export interface LeagueRow {
   display_place: number | null
   is_special: boolean
   is_champion: boolean
+  /** Меньше 5 боёв: игрок стоит ниже всех откалиброванных. */
+  is_calibrating: boolean
   fights: number
   wins: number
   losses: number
@@ -284,6 +288,9 @@ export interface PlayerProfile {
     is_special: boolean
     is_champion: boolean
     tier: RatingTier | null
+    is_calibrating: boolean
+    /** Неделя и больше без боёв: сколько дней и сколько очков уже снято за этот простой. */
+    inactivity: { days_without_fights: number; lost_points: number; decay_starts_at: string } | null
   }
   stats: {
     fights: number

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import aliased
 
 from app.deps import Db, OwnerUser, StaffUser, require_staff
@@ -182,7 +182,10 @@ def admin_upsets(db: Db) -> list[dict]:
         .join(loser_change, (loser_change.fight_id == Fight.id) & (loser_change.player_id == Fight.loser_id))
         .where(
             Fight.status == FightStatus.CONFIRMED,
-            winner_change.place_before - loser_change.place_before >= UPSET_GAP,
+            or_(
+                winner_change.place_before - loser_change.place_before >= UPSET_GAP,
+                Fight.id.in_(select(RatingAdjustment.fight_id)),
+            ),
         )
         .order_by(Fight.fought_at.desc(), Fight.id.desc())
     ).all()

@@ -207,6 +207,7 @@ def _rating_change_out(change) -> dict:
         "place_before": change.place_before,
         "points_before": change.points_before,
         "delta": change.delta,
+        "loss_discount": change.loss_discount,
         "points_after": change.points_after,
         "place_after": change.place_after,
     }
@@ -240,6 +241,7 @@ def rating_row_out(row: RatingRow, viewer: User) -> dict:
         "display_place": row.display_place,
         "is_special": row.is_special if viewer.is_staff else False,
         "is_champion": row.is_champion,
+        "is_calibrating": row.is_calibrating,
     }
 
 

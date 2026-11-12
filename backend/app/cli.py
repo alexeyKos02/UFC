@@ -1,4 +1,4 @@
-"""Команды обслуживания: python -m app.cli create-owner | seed-demo."""
+"""Команды обслуживания: python -m app.cli create-owner | seed-demo | apply-inactivity."""
 
 import argparse
 import getpass
@@ -13,7 +13,7 @@ from app.schemas import CredentialsIn
 from app.security import hash_password
 from app.seed import seed_demo
 from app.services.accounts import create_user
-from app.services.rating import acquire_rating_lock
+from app.services.rating import acquire_rating_lock, apply_inactivity
 
 
 def create_owner(login: str, password: str | None) -> int:
@@ -57,10 +57,15 @@ def main() -> int:
     owner.add_argument("--login", required=True)
     owner.add_argument("--password", help="Если не указан, будет запрошен в терминале")
     commands.add_parser("seed-demo", help="Загрузить демоданные")
+    commands.add_parser("apply-inactivity", help="Снять очки за простой сейчас, не дожидаясь фоновой задачи")
     args = parser.parse_args()
 
     if args.command == "create-owner":
         return create_owner(args.login, args.password)
+    if args.command == "apply-inactivity":
+        with SessionLocal() as db:
+            print(f"Снятий за простой: {apply_inactivity(db)}")
+        return 0
     return seed_demo()
 
 

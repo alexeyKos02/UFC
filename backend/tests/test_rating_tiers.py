@@ -5,7 +5,13 @@ def tier_of(viewer, player_id: int) -> str | None:
     return viewer.get(f"/players/{player_id}").json()["rating"]["tier"]
 
 
-def test_tier_boundaries_follow_table_numbers(admin, players):
+def no_calibration(monkeypatch) -> None:
+    """Плашки по номерам проверяем без калибровки: иначе каждому игроку нужно 5 боёв."""
+    monkeypatch.setattr("app.services.rating.CALIBRATION_FIGHTS", 0)
+
+
+def test_tier_boundaries_follow_table_numbers(admin, players, monkeypatch):
+    no_calibration(monkeypatch)
     apis = players(21)
     rows = admin.get("/players").json()
     by_place = {row["display_place"]: row["player"]["id"] for row in rows}
@@ -21,7 +27,8 @@ def test_champion_without_table_number_is_top(admin, players):
     assert tier_of(weak, champion.id) == "top"
 
 
-def test_special_place_counts_for_the_tier(admin, players):
+def test_special_place_counts_for_the_tier(admin, players, monkeypatch):
+    no_calibration(monkeypatch)
     apis = players(9)
     rows = admin.get("/players").json()
     last = rows[-1]

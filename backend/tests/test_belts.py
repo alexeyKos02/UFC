@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
-from app.services.rating import elo_delta
+from tests.conftest import expected_gain
 from tests.conftest import (
     confirm,
     finish_tournament,
@@ -111,8 +111,8 @@ def test_vacant_main_belt_title_fight(admin, players):
     assert main_belt(first)["champion"] is None
 
     confirm(second, submitted)
-    assert first.points() == 1020
-    assert second.points() == 980
+    assert first.points() == 1024
+    assert second.points() == 982
     belts = first.profile()["belts"]
     assert belts["active"][0]["belt"]["kind"] == "main"
 
@@ -129,7 +129,7 @@ def test_champion_defense_and_transfer(admin, players):
     points_before, challenger_before = champion.points(), next_challenger.points()
     played = play_title(defense, next_challenger, champion, champion)
     assert played["is_title_defense"] is True
-    assert champion.points() == points_before + elo_delta(points_before, challenger_before)
+    assert champion.points() == points_before + expected_gain(points_before, challenger_before)
     assert main_belt(admin)["champion"]["id"] == champion.id
     history = admin.get(f"/belts/{main_belt(admin)['id']}").json()["history"]
     assert [item["is_defense"] for item in history] == [True, False]
@@ -214,7 +214,7 @@ def test_parallel_title_confirmation_awards_once(admin, players):
     assert {response.status_code for response in responses} == {200}
     history = admin.get(f"/belts/{main_belt(admin)['id']}").json()["history"]
     assert len(history) == 1
-    assert first.points() == 1020
+    assert first.points() == 1024
 
 
 def test_title_result_only_by_participant(admin, players):

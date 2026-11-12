@@ -9,11 +9,13 @@ import math
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from itertools import count, groupby
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.db import utcnow
 from app.models import (
     Belt,
     BeltKind,
@@ -21,20 +23,39 @@ from app.models import (
     FightMethod,
     FightStatus,
     RatingChange,
+    RatingDecay,
     SpecialPlace,
     User,
     UserStatus,
 )
 
 RATING_LOCK_KEY = 7_202_411
-# Апсет — победа над соперником выше на 3 места или больше. Очков он больше не добавляет
+# Апсет — победа над соперником выше на 3 места или больше. Очков он сам не добавляет
 # (это делает Elo), но по нему отбираются бои для ручной корректировки.
 UPSET_GAP = 3
 
-# Elo: ожидаемый результат 1 / (1 + 10^((Rсоперника − Rигрока) / ELO_SCALE)),
-# победитель получает round(ELO_K · (1 − ожидаемый)), проигравший теряет столько же.
-ELO_K = 40
+# Elo: ожидаемый результат 1 / (1 + 10^((Rсоперника − Rигрока) / ELO_SCALE)).
+# Победитель получает round(K победителя · (1 − ожидаемый)), минимум 1.
+# Проигравший теряет round(K проигравшего · (1 − ожидаемый) · доля), минимум 1.
 ELO_SCALE = 400
+START_POINTS = 1000
+# K зависит от опыта: новичок быстрее находит своё место, у опытных таблица спокойнее.
+K_NEW = 48
+K_EXPERIENCED = 32
+NEW_PLAYER_FIGHTS = 10
+# Скидка за активность: поражение стоит 75% от полного Elo. Действует на первые
+# LOSS_DISCOUNTS_PER_OPPONENT поражения от одного соперника за LOSS_DISCOUNT_WINDOW,
+# иначе двое могли бы расти, по очереди проигрывая друг другу.
+LOSS_SHARE = 0.75
+LOSS_DISCOUNTS_PER_OPPONENT = 2
+LOSS_DISCOUNT_WINDOW = timedelta(days=7)
+# Пока у игрока меньше боёв, он стоит в таблице ниже всех откалиброванных.
+CALIBRATION_FIGHTS = 5
+# Простой: через INACTIVITY_GRACE без боя и затем каждые INACTIVITY_STEP игрок теряет
+# INACTIVITY_SHARE от превышения над стартовыми очками. Ниже старта не опускает.
+INACTIVITY_GRACE = timedelta(days=14)
+INACTIVITY_STEP = timedelta(days=7)
+INACTIVITY_SHARE = 0.03
 
 
 def acquire_rating_lock(db: Session) -> None:
@@ -57,23 +78,69 @@ def expected_score(points: int, opponent_points: int) -> float:
     return 1 / (1 + 10 ** ((opponent_points - points) / ELO_SCALE))
 
 
-def elo_delta(winner_points: int, loser_points: int) -> int:
-    """Очки, которые победитель забирает у проигравшего. Победа всегда даёт хотя бы 1 очко."""
-    gain = ELO_K * (1 - expected_score(winner_points, loser_points))
-    return max(1, math.floor(gain + 0.5))
+def _round(value: float) -> int:
+    return math.floor(value + 0.5)
+
+
+def k_factor(rated_fights: int) -> int:
+    """K по числу боёв, за которые игрок уже получал или терял очки."""
+    return K_NEW if rated_fights < NEW_PLAYER_FIGHTS else K_EXPERIENCED
+
+
+@dataclass(frozen=True)
+class FightPoints:
+    gain: int
+    loss: int
+    # На сколько очков меньше проигравший потерял благодаря скидке за активность.
+    loss_discount: int
+
+
+def fight_points(
+    winner_points: int, loser_points: int, winner_k: int, loser_k: int, discounted: bool
+) -> FightPoints:
+    upset_share = 1 - expected_score(winner_points, loser_points)
+    gain = max(1, _round(winner_k * upset_share))
+    full_loss = max(1, _round(loser_k * upset_share))
+    loss = max(1, _round(loser_k * upset_share * LOSS_SHARE)) if discounted else full_loss
+    return FightPoints(gain, loss, full_loss - loss)
 
 
 def is_upset(winner_place: int, loser_place: int) -> bool:
     return winner_place - loser_place >= UPSET_GAP
 
 
-def apply_fight_rating(db: Session, fight: Fight, winner: User, loser: User) -> None:
+def _rated_fights(db: Session, player_id: int) -> int:
+    return db.scalar(select(func.count()).select_from(RatingChange).where(RatingChange.player_id == player_id))
+
+
+def _discount_available(db: Session, loser_id: int, winner_id: int, now: datetime) -> bool:
+    used = db.scalar(
+        select(func.count())
+        .select_from(RatingChange)
+        .join(Fight, Fight.id == RatingChange.fight_id)
+        .where(
+            RatingChange.player_id == loser_id,
+            RatingChange.loss_discount > 0,
+            Fight.winner_id == winner_id,
+            Fight.confirmed_at > now - LOSS_DISCOUNT_WINDOW,
+        )
+    )
+    return used < LOSS_DISCOUNTS_PER_OPPONENT
+
+
+def apply_fight_rating(db: Session, fight: Fight, winner: User, loser: User, now: datetime) -> None:
     places = points_places(db)
     winner_place, loser_place = places[winner.id], places[loser.id]
-    delta = elo_delta(winner.rating_points, loser.rating_points)
+    result = fight_points(
+        winner.rating_points,
+        loser.rating_points,
+        k_factor(_rated_fights(db, winner.id)),
+        k_factor(_rated_fights(db, loser.id)),
+        _discount_available(db, loser.id, winner.id, now),
+    )
     winner_before, loser_before = winner.rating_points, loser.rating_points
-    winner.rating_points += delta
-    loser.rating_points -= delta
+    winner.rating_points += result.gain
+    loser.rating_points -= result.loss
     db.flush()
     places_after = points_places(db)
     db.add_all(
@@ -83,7 +150,7 @@ def apply_fight_rating(db: Session, fight: Fight, winner: User, loser: User) -> 
                 player_id=winner.id,
                 place_before=winner_place,
                 points_before=winner_before,
-                delta=delta,
+                delta=result.gain,
                 points_after=winner.rating_points,
                 place_after=places_after[winner.id],
             ),
@@ -92,13 +159,99 @@ def apply_fight_rating(db: Session, fight: Fight, winner: User, loser: User) -> 
                 player_id=loser.id,
                 place_before=loser_place,
                 points_before=loser_before,
-                delta=-delta,
+                delta=-result.loss,
+                loss_discount=result.loss_discount,
                 points_after=loser.rating_points,
                 place_after=places_after[loser.id],
             ),
         ]
     )
     db.flush()
+
+
+def inactivity_penalty(points: int) -> int:
+    """Сколько очков снимается за неделю простоя. Ниже стартовых очков не опускает."""
+    excess = points - START_POINTS
+    if excess <= 0:
+        return 0
+    return min(excess, max(1, _round(excess * INACTIVITY_SHARE)))
+
+
+def _last_fight_times(db: Session) -> dict[int, datetime]:
+    last: dict[int, datetime] = {}
+    for column in (Fight.winner_id, Fight.loser_id):
+        rows = db.execute(
+            select(column, func.max(Fight.confirmed_at)).where(Fight.status == FightStatus.CONFIRMED).group_by(column)
+        ).all()
+        for player_id, moment in rows:
+            if player_id not in last or moment > last[player_id]:
+                last[player_id] = moment
+    return last
+
+
+def apply_inactivity(db: Session, now: datetime | None = None) -> int:
+    """Снимает очки за все наступившие недели простоя. Повторный запуск ничего не меняет.
+
+    Срок каждого снятия считается от последнего боя, поэтому уже снятая неделя узнаётся по due_at.
+    Возвращает число снятий.
+    """
+    now = now or utcnow()
+    acquire_rating_lock(db)
+    last_fight = _last_fight_times(db)
+    applied = 0
+    players = db.scalars(
+        select(User)
+        .where(User.status == UserStatus.ACTIVE, User.rating_points > START_POINTS)
+        .order_by(User.id)
+        .with_for_update(key_share=True)
+    ).all()
+    for player in players:
+        last = last_fight.get(player.id)
+        if last is None:
+            continue
+        done = set(
+            db.scalars(select(RatingDecay.due_at).where(RatingDecay.player_id == player.id, RatingDecay.due_at > last))
+        )
+        due = last + INACTIVITY_GRACE
+        while due <= now:
+            penalty = inactivity_penalty(player.rating_points)
+            if penalty == 0:
+                break
+            if due not in done:
+                db.add(
+                    RatingDecay(
+                        player_id=player.id,
+                        due_at=due,
+                        points_before=player.rating_points,
+                        delta=-penalty,
+                        points_after=player.rating_points - penalty,
+                    )
+                )
+                player.rating_points -= penalty
+                applied += 1
+            due += INACTIVITY_STEP
+    db.commit()
+    return applied
+
+
+def inactivity_info(db: Session, player: User, now: datetime | None = None) -> dict | None:
+    """Для профиля: сколько дней без боя и сколько очков уже снято за этот простой."""
+    now = now or utcnow()
+    last = _last_fight_times(db).get(player.id)
+    if last is None or now - last < INACTIVITY_GRACE - INACTIVITY_STEP:
+        return None
+    lost = db.scalar(
+        select(func.coalesce(func.sum(RatingDecay.delta), 0)).where(
+            RatingDecay.player_id == player.id, RatingDecay.due_at > last
+        )
+    )
+    if lost == 0 and player.rating_points <= START_POINTS:
+        return None
+    return {
+        "days_without_fights": (now - last).days,
+        "lost_points": -lost,
+        "decay_starts_at": last + INACTIVITY_GRACE,
+    }
 
 
 @dataclass
@@ -108,6 +261,8 @@ class RatingRow:
     display_place: int | None
     is_special: bool
     is_champion: bool = False
+    # Меньше CALIBRATION_FIGHTS боёв: игрок стоит ниже всех откалиброванных.
+    is_calibrating: bool = False
 
 
 # От самого убедительного способа победы к наименее убедительному. Победа без указанного способа не считается.
@@ -146,7 +301,8 @@ def break_tie(players: list[User], fights: Iterable[tuple[int, int, FightMethod 
 def rating_table(db: Session) -> list[RatingRow]:
     """Чемпион основного пояса идёт первым без номера, остальные нумеруются с единицы.
 
-    Сначала закрепляются спецместа, остальные занимают свободные номера по одному.
+    Сначала закрепляются спецместа, остальные занимают свободные номера по одному:
+    сначала откалиброванные игроки по очкам, затем те, у кого меньше CALIBRATION_FIGHTS боёв.
     """
     players = list(
         db.scalars(
@@ -175,11 +331,16 @@ def rating_table(db: Session) -> list[RatingRow]:
     fights = db.execute(
         select(Fight.winner_id, Fight.loser_id, Fight.method).where(Fight.status == FightStatus.CONFIRMED)
     ).all()
+    fights_played = Counter(player_id for winner_id, loser_id, _ in fights for player_id in (winner_id, loser_id))
     free_numbers = (number for number in count(1) if number not in taken_numbers)
-    # Игроки уже идут по убыванию очков, поэтому равные стоят подряд.
-    for _, tied in groupby(to_number, key=lambda player: player.rating_points):
-        for player in break_tie(list(tied), fights):
-            rows.append(RatingRow(player, points_place_by_id[player.id], next(free_numbers), False))
+    for calibrating in (False, True):
+        group = [player for player in to_number if (fights_played[player.id] < CALIBRATION_FIGHTS) == calibrating]
+        # Игроки уже идут по убыванию очков, поэтому равные стоят подряд.
+        for _, tied in groupby(group, key=lambda player: player.rating_points):
+            for player in break_tie(list(tied), fights):
+                rows.append(
+                    RatingRow(player, points_place_by_id[player.id], next(free_numbers), False, False, calibrating)
+                )
 
     rows.sort(key=lambda row: (not row.is_champion, row.display_place or 0))
     return rows
@@ -199,6 +360,8 @@ def rating_tier(row: RatingRow | None) -> str | None:
     """Плашка в профиле по номеру из таблицы. Чемпион стоит выше №1, поэтому всегда в топе."""
     if row is None:
         return None
+    if row.is_calibrating:
+        return "calibration"
     if row.is_champion or row.display_place <= TOP_TIER_LAST_PLACE:
         return "top"
     return "middle" if row.display_place <= MIDDLE_TIER_LAST_PLACE else "bottom"

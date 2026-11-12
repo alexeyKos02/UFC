@@ -1,4 +1,4 @@
-from app.services.rating import elo_delta
+from tests.conftest import expected_gain
 from tests.conftest import ladder, play
 from tests.test_belts import play_title, schedule
 
@@ -74,7 +74,7 @@ def test_champion_display_does_not_change_points_or_upsets(admin, players):
 
     bottom_before, top_before = bottom.points(), top.points()
     fight = play(bottom, top, bottom)
-    assert bottom.points() == bottom_before + elo_delta(bottom_before, top_before)
+    assert bottom.points() == bottom_before + expected_gain(bottom_before, top_before)
     changes = {item["player"]["id"]: item for item in fight["rating_changes"]}
     assert changes[bottom.id]["place_before"] == 4
     assert changes[top.id]["place_before"] == 1

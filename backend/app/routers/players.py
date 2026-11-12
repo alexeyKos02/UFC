@@ -63,6 +63,8 @@ def player_profile(player_id: int, viewer: CurrentUser, db: Db) -> dict:
             "is_special": row.is_special if row and viewer.is_staff else False,
             "is_champion": row.is_champion if row else False,
             "tier": rating.rating_tier(row),
+            "is_calibrating": row.is_calibrating if row else False,
+            "inactivity": rating.inactivity_info(db, user) if row else None,
         },
         "stats": stats_with_leaders(stats.player_stats(db, user.id)),
         "belts": player_belts(db, user),

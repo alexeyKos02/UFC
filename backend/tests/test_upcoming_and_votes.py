@@ -49,7 +49,7 @@ def test_place_after_is_stored_for_both_players(players):
     fight = play(first, second, first)
     changes = {item["player"]["id"]: item for item in fight["rating_changes"]}
     assert (changes[first.id]["place_before"], changes[first.id]["place_after"]) == (1, 1)
-    # После боя: first 1020, third 1000, second 980.
+    # После боя: first 1024, third 1000, second 982.
     assert (changes[second.id]["place_before"], changes[second.id]["place_after"]) == (1, 3)
 
 
@@ -107,8 +107,8 @@ def test_result_of_planned_fight_goes_through_confirmation(players):
     assert first.points() == 1000
 
     assert confirm(first, fight).json()["status"] == "confirmed"
-    assert second.points() == 1020
-    assert first.points() == 980
+    assert second.points() == 1024
+    assert first.points() == 982
 
 
 def test_planned_result_rules(players):

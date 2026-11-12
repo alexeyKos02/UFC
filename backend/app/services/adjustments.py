@@ -33,7 +33,12 @@ def _load_upset_fight(db: Session, fight_id: int) -> Fight:
     }
     if fight.winner_id not in changes:
         raise conflict("За этот бой очки не начислялись, корректировать нечего")
-    if not is_upset(changes[fight.winner_id].place_before, changes[fight.loser_id].place_before):
+    # После пересчёта истории бой с уже выданной корректировкой мог перестать быть апсетом:
+    # её всё равно можно изменить или отменить.
+    already_adjusted = fight.adjustment is not None
+    if not already_adjusted and not is_upset(
+        changes[fight.winner_id].place_before, changes[fight.loser_id].place_before
+    ):
         raise conflict("Победитель не был ниже соперника на 3 места или больше")
     return fight
 
