@@ -7,7 +7,7 @@ import StatusBadge from './StatusBadge.vue'
 import { boutCaption, formatBoutDate, formatDateTime, methodLabel, resultLine, signed } from '../format'
 import type { FightDetail } from '../types'
 
-const props = defineProps<{ fight: FightDetail; collapsible?: boolean; hidePoints?: boolean }>()
+const props = defineProps<{ fight: FightDetail; collapsible?: boolean }>()
 const emit = defineEmits<{ changed: []; collapse: [] }>()
 
 interface DuelRow {
@@ -43,18 +43,14 @@ const duels = computed<DuelRow[]>(() => {
   if (first && second) {
     rows.push(row('Место до боя', [first.place_before, second.place_before], (place) => `№${place}`, false))
     rows.push(row('Место после боя', [first.place_after, second.place_after], (place) => `№${place}`, false))
-    if (!props.hidePoints) {
-      rows.push(row('Очки до боя', [first.points_before, second.points_before]))
-      if (fight.adjustment) {
-        const { winner_delta: winner, loser_delta: loser } = fight.adjustment
-        rows.push(row('Ручная корректировка', fight.winner_id === fight.player1.id ? [winner, loser] : [loser, winner], signed))
-      }
-      rows.push(row('Очки после начисления', [first.points_after, second.points_after]))
+    rows.push(row('Очки до боя', [first.points_before, second.points_before]))
+    if (fight.adjustment) {
+      rows.push(row('Ручная корректировка', [manual(fight.player1.id), manual(fight.player2.id)], signed))
     }
+    rows.push(row('Очки после боя', [first.points_after + manual(fight.player1.id), second.points_after + manual(fight.player2.id)]))
   }
-  const votes = fight.votes ?? (props.hidePoints ? { first: 0, second: 0 } : null)
-  if (votes) {
-    rows.push(row('Голоса зрителей', [votes.first, votes.second]))
+  if (fight.votes) {
+    rows.push(row('Голоса зрителей', [fight.votes.first, fight.votes.second]))
   }
   if (fight.comparison) {
     rows.push(row('Личные встречи', fight.comparison.head_to_head))
@@ -64,7 +60,12 @@ const duels = computed<DuelRow[]>(() => {
   return rows
 })
 
-const discount = computed(() => props.fight.rating_changes.find((change) => change.loss_discount > 0))
+/** Ручная корректировка для игрока: у победителя winner_delta, у проигравшего — loser_delta. */
+function manual(playerId: number): number {
+  const adjustment = props.fight.adjustment
+  if (!adjustment) return 0
+  return playerId === props.fight.winner_id ? adjustment.winner_delta : adjustment.loser_delta
+}
 
 function positive(value: number): number {
   return Math.max(0, value)
@@ -88,7 +89,7 @@ function positive(value: number): number {
 
     <div class="bout-body">
       <div class="bout-figure first">
-        <FighterPhoto :fighter="fight.player1" side="first" :winner="fight.winner_id === fight.player1.id" />
+        <FighterPhoto :fighter="fight.player1" side="first" :winner="fight.winner_id === fight.player1.id" :delta="fight.points_change?.[0]" />
       </div>
 
       <div class="bout-sheet">
@@ -124,10 +125,7 @@ function positive(value: number): number {
           </div>
         </div>
 
-        <p v-if="discount && !hidePoints" class="preview">
-          Скидка за активность: {{ discount.player.nickname }} потерял {{ -discount.delta }} вместо {{ discount.loss_discount - discount.delta }}.
-        </p>
-        <p v-if="fight.adjustment && !hidePoints" class="preview">Причина ручной корректировки: {{ fight.adjustment.reason }}</p>
+        <p v-if="fight.adjustment" class="preview">Причина ручной корректировки: {{ fight.adjustment.reason }}</p>
 
         <details class="bout-versions" :open="fight.versions.length > 1">
           <summary>История версий: {{ fight.versions.length }}</summary>
@@ -148,7 +146,7 @@ function positive(value: number): number {
       </div>
 
       <div class="bout-figure second">
-        <FighterPhoto :fighter="fight.player2" side="second" :winner="fight.winner_id === fight.player2.id" />
+        <FighterPhoto :fighter="fight.player2" side="second" :winner="fight.winner_id === fight.player2.id" :delta="fight.points_change?.[1]" />
       </div>
     </div>
   </article>

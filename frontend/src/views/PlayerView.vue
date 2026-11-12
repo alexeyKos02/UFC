@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import { setAccount } from '../auth'
@@ -21,6 +21,30 @@ const props = defineProps<{ id: string }>()
 const { data, error, loading, reload } = useLoad(() => api.get<PlayerProfile>(`/players/${props.id}`))
 const history = useLoad(() => api.get<FightBrief[]>(`/players/${props.id}/fights`))
 const visibleFights = ref(HISTORY_PAGE)
+
+type ResultFilter = 'all' | 'wins' | 'losses'
+const result = ref<ResultFilter>('all')
+const playerId = computed(() => Number(props.id))
+const filteredHistory = computed(() => {
+  const fights = history.data.value ?? []
+  if (result.value === 'all') return fights
+  const wantWin = result.value === 'wins'
+  return fights.filter((fight) => (fight.winner_id === playerId.value) === wantWin)
+})
+const resultOptions = computed(() => {
+  const fights = history.data.value ?? []
+  const wins = fights.filter((fight) => fight.winner_id === playerId.value).length
+  return [
+    { value: 'all' as const, label: 'Все', count: fights.length },
+    { value: 'wins' as const, label: 'Победы', count: wins },
+    { value: 'losses' as const, label: 'Поражения', count: fights.length - wins },
+  ]
+})
+
+function setResult(value: ResultFilter): void {
+  result.value = value
+  visibleFights.value = HISTORY_PAGE
+}
 const { busy, run } = useAction()
 
 const nickname = ref('')
@@ -183,14 +207,28 @@ async function upload(event: Event, path: string): Promise<void> {
         </section>
 
         <section class="section">
-          <h2>История боёв</h2>
-          <div v-if="history.data.value?.length" class="stack" style="gap: 16px">
-            <FightCard v-for="fight in history.data.value.slice(0, visibleFights)" :key="fight.id" :fight="fight" hide-points />
+          <div class="section-head">
+            <h2>История боёв</h2>
+            <div v-if="history.data.value?.length" class="filter-chips" role="group" aria-label="Результат боя">
+              <button
+                v-for="option in resultOptions"
+                :key="option.value"
+                type="button"
+                :aria-pressed="result === option.value"
+                @click="setResult(option.value)"
+              >
+                {{ option.label }} <b>{{ option.count }}</b>
+              </button>
+            </div>
+          </div>
+          <div v-if="filteredHistory.length" class="stack" style="gap: 16px">
+            <FightCard v-for="fight in filteredHistory.slice(0, visibleFights)" :key="fight.id" :fight="fight" />
           </div>
           <SkeletonBlock v-else-if="history.loading.value" kind="list" :count="2" />
+          <p v-else-if="history.data.value?.length" class="empty">{{ result === 'wins' ? 'Побед пока нет.' : 'Поражений пока нет.' }}</p>
           <p v-else class="empty">Подтверждённых боёв пока нет.</p>
           <button
-            v-if="(history.data.value?.length ?? 0) > visibleFights"
+            v-if="filteredHistory.length > visibleFights"
             class="btn"
             style="align-self: center"
             @click="visibleFights += HISTORY_PAGE"

@@ -18,6 +18,9 @@ export const tierLabel: Record<RatingTier, string> = {
   calibration: 'Калибровка',
 }
 
+/** Сколько боёв нужно сыграть, чтобы выйти из калибровки (как CALIBRATION_FIGHTS на бэкенде). */
+export const CALIBRATION_FIGHTS = 5
+
 /** Сколько очков рекомендуем за победу в турнире: по 10 за каждый круг сетки. */
 export function recommendedTournamentPoints(capacity: number): number {
   const rounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, capacity))))

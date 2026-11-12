@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import { signed } from '../format'
 import type { Fighter } from '../types'
 
-defineProps<{ fighter: Fighter; winner?: boolean; side: 'first' | 'second' }>()
+/** delta — на сколько очков изменился рейтинг бойца за этот бой; не передаётся, пока очков нет. */
+defineProps<{ fighter: Fighter; winner?: boolean; side: 'first' | 'second'; delta?: number | null }>()
 </script>
 
 <template>
@@ -15,5 +17,11 @@ defineProps<{ fighter: Fighter; winner?: boolean; side: 'first' | 'second' }>()
       </g>
     </svg>
     <span v-if="winner" class="win-tag" :class="side">Победа</span>
+    <span
+      v-if="delta !== undefined && delta !== null"
+      class="photo-delta"
+      :class="[side, delta > 0 ? 'tone-plus' : delta < 0 ? 'tone-minus' : '']"
+      :aria-label="`Очки за бой: ${signed(delta)}`"
+    >{{ signed(delta) }}</span>
   </RouterLink>
 </template>

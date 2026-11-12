@@ -244,6 +244,8 @@ export interface Promo {
 }
 
 export interface HomeData {
+  /** Назначенные титульные бои без результата: за них голосуют прямо на главной. */
+  title_fights: UpcomingBout[]
   tournaments: TournamentCard[]
   promos: Promo[]
 }

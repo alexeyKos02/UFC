@@ -5,8 +5,16 @@ from app.deps import CurrentUser, Db
 from app.errors import not_found
 from app.models import Belt, BeltKind, TitleFight, Tournament, TournamentStatus
 from app.schemas import FightResultIn
-from app.serializers import belt_detail, belt_out, fight_detail, promo_out, title_fight_out, tournament_cards
-from app.services import promos, title_fights
+from app.serializers import (
+    belt_detail,
+    belt_out,
+    fight_detail,
+    promo_out,
+    title_fight_out,
+    tournament_cards,
+    upcoming_out,
+)
+from app.services import promos, title_fights, upcoming
 
 router = APIRouter(tags=["public"])
 
@@ -18,7 +26,12 @@ def home(viewer: CurrentUser, db: Db) -> dict:
         .where(Tournament.status.in_([TournamentStatus.REGISTRATION, TournamentStatus.IN_PROGRESS]))
         .order_by(Tournament.status, Tournament.created_at.desc())
     ).all()
+    # Назначенные титульные бои без результата: на главной за них можно сразу голосовать.
+    title_bouts = [
+        upcoming_out(kind, target, viewer) for kind, target in upcoming.list_upcoming(db) if kind == "title"
+    ]
     return {
+        "title_fights": title_bouts,
         "tournaments": tournament_cards(db, list(tournaments), viewer),
         "promos": [promo_out(db, promo, viewer) for promo in promos.visible_promos(db)],
     }

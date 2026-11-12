@@ -7,10 +7,10 @@ import FightExpanded from './FightExpanded.vue'
 import FighterPhoto from './FighterPhoto.vue'
 import StatusBadge from './StatusBadge.vue'
 import { useAction } from '../feedback'
-import { boutCaption, formatBoutDate, methodLabel, signed } from '../format'
+import { boutCaption, formatBoutDate, methodLabel } from '../format'
 import type { FightBrief, FightDetail } from '../types'
 
-const props = defineProps<{ fight: FightBrief; actions?: boolean; hidePoints?: boolean }>()
+const props = defineProps<{ fight: FightBrief; actions?: boolean }>()
 const emit = defineEmits<{ changed: [] }>()
 
 const { busy, run } = useAction()
@@ -20,6 +20,9 @@ const expanded = ref(false)
 const hasActions = computed(
   () => props.actions && (props.fight.can_confirm || props.fight.can_dispute || props.fight.can_correct),
 )
+
+// У боя без голосования (записан сразу, без анонса) голосов просто нет — показываем нули.
+const votes = computed(() => props.fight.votes ?? { first: 0, second: 0 })
 
 function fetchDetail(): Promise<FightDetail | undefined> {
   return run(() => api.get<FightDetail>(`/fights/${props.fight.id}`))
@@ -41,7 +44,7 @@ async function onChanged(): Promise<void> {
 </script>
 
 <template>
-  <FightExpanded v-if="expanded && detail" :fight="detail" collapsible :hide-points="hidePoints" @collapse="expanded = false" @changed="onChanged" />
+  <FightExpanded v-if="expanded && detail" :fight="detail" collapsible @collapse="expanded = false" @changed="onChanged" />
   <article v-else class="bout">
     <button class="bout-toggle" aria-label="Развернуть бой" :aria-expanded="false" :disabled="busy" @click="expand">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -51,7 +54,7 @@ async function onChanged(): Promise<void> {
 
     <div class="bout-main">
       <div class="bout-photo first">
-        <FighterPhoto :fighter="fight.player1" side="first" :winner="fight.winner_id === fight.player1.id" />
+        <FighterPhoto :fighter="fight.player1" side="first" :winner="fight.winner_id === fight.player1.id" :delta="fight.points_change?.[0]" />
       </div>
 
       <div class="bout-center">
@@ -69,27 +72,17 @@ async function onChanged(): Promise<void> {
       </div>
 
       <div class="bout-photo second">
-        <FighterPhoto :fighter="fight.player2" side="second" :winner="fight.winner_id === fight.player2.id" />
+        <FighterPhoto :fighter="fight.player2" side="second" :winner="fight.winner_id === fight.player2.id" :delta="fight.points_change?.[1]" />
       </div>
     </div>
 
     <div class="bout-strip">
       <div><StatusBadge :fight="fight.status" /></div>
       <div class="bout-strip-center">
-        <div v-if="fight.points_change && !hidePoints" class="bout-points">
-          <b>{{ signed(fight.points_change[0]) }}</b>
-          <span>Очки</span>
-          <b>{{ signed(fight.points_change[1]) }}</b>
-        </div>
-        <div v-if="hidePoints" class="bout-points">
-          <b>{{ fight.player1.nickname }}: {{ fight.votes?.first ?? 0 }}</b>
+        <div class="bout-points" :aria-label="`Голоса зрителей: ${votes.first} и ${votes.second}`">
+          <b>{{ votes.first }}</b>
           <span>Голоса</span>
-          <b>{{ fight.player2.nickname }}: {{ fight.votes?.second ?? 0 }}</b>
-        </div>
-        <div v-else-if="fight.votes && fight.votes.first + fight.votes.second" class="bout-points">
-          <b>{{ fight.votes.first }}</b>
-          <span>Голоса</span>
-          <b>{{ fight.votes.second }}</b>
+          <b>{{ votes.second }}</b>
         </div>
       </div>
       <div class="bout-strip-end">

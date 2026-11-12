@@ -4,6 +4,7 @@ import { api } from '../api'
 import PromoCard from '../components/PromoCard.vue'
 import StateBlock from '../components/StateBlock.vue'
 import TournamentTile from '../components/TournamentTile.vue'
+import UpcomingBoutCard from '../components/UpcomingBoutCard.vue'
 import { useLoad } from '../feedback'
 import type { HomeData } from '../types'
 
@@ -18,6 +19,12 @@ const { data, error, loading, reload } = useLoad(() => api.get<HomeData>('/home'
     </div>
     <StateBlock :loading="loading" :error="error" skeleton="cards">
       <template v-if="data">
+        <section v-if="data.title_fights.length" class="section">
+          <h2>{{ data.title_fights.length > 1 ? 'Титульные бои' : 'Титульный бой' }}</h2>
+          <div class="stack" style="gap: 16px">
+            <UpcomingBoutCard v-for="bout in data.title_fights" :key="bout.id" :bout="bout" @changed="reload" />
+          </div>
+        </section>
         <section v-if="data.promos.length" class="section" aria-label="Промо">
           <div class="grid">
             <PromoCard v-for="promo in data.promos" :key="promo.id" :promo="promo" />

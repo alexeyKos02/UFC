@@ -965,6 +965,45 @@ th {
   flex: none;
 }
 
+/* Прогресс калибровки под ником: отступ равен аватару и зазору чипа. */
+.calibration {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+  padding-left: 36px;
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.calibration-steps {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.calibration-steps i {
+  width: 18px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--surface-3);
+}
+
+.calibration-steps i.done {
+  background: var(--gold);
+}
+
+@media (max-width: 400px) {
+  .calibration {
+    padding-left: 34px;
+  }
+
+  .calibration-steps i {
+    width: 12px;
+  }
+}
+
 @media (max-width: 400px) {
   .fit-table th,
   .fit-table td {
@@ -1414,6 +1453,24 @@ th.num {
   left: 0;
 }
 
+/* Изменение очков за бой в нижнем углу фото, с той же стороны, что и «Победа». */
+.photo-delta {
+  position: absolute;
+  bottom: 6px;
+  padding: 3px 9px;
+  background: rgba(14, 15, 18, 0.85);
+  font: 600 18px/1.2 var(--heading);
+  font-variant-numeric: tabular-nums;
+}
+
+.photo-delta.first {
+  right: 0;
+}
+
+.photo-delta.second {
+  left: 0;
+}
+
 .bout-center {
   align-self: center;
   display: flex;
@@ -1731,6 +1788,51 @@ th.num {
   background: var(--surface-3);
   color: var(--text);
   border-color: var(--red-strong);
+}
+
+/* Переключатель фильтра: одна кнопка нажата. */
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-chips button {
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font: 500 14px/1.2 var(--body);
+  cursor: pointer;
+}
+
+.filter-chips button b {
+  margin-left: 4px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-chips button[aria-pressed='true'] {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--red-strong);
+}
+
+.filter-chips button[aria-pressed='true'] b {
+  color: var(--text);
+}
+
+@media (max-width: 400px) {
+  .filter-chips {
+    gap: 4px;
+  }
+
+  .filter-chips button {
+    padding: 6px 8px;
+    font-size: 13px;
+  }
 }
 
 .inline-input {

@@ -7,7 +7,7 @@ import ChampionMark from '../components/ChampionMark.vue'
 import PlayerChip from '../components/PlayerChip.vue'
 import StateBlock from '../components/StateBlock.vue'
 import { useLoad } from '../feedback'
-import { plural } from '../format'
+import { CALIBRATION_FIGHTS, plural } from '../format'
 import type { LeagueRow } from '../types'
 
 const search = ref('')
@@ -87,7 +87,17 @@ const hasCalibrating = computed(() => rows.value.some((row) => row.is_calibratin
                 <div class="row" style="gap: 6px">
                   <PlayerChip :player="row.player" />
                   <span v-if="row.is_special" class="badge plain tone-gold">Спецместо</span>
-                  <span v-if="row.is_calibrating" class="badge plain muted" title="Меньше 5 боёв">Калибровка</span>
+                </div>
+                <div
+                  v-if="row.is_calibrating"
+                  class="calibration"
+                  role="img"
+                  :aria-label="`Калибровка: ${Math.min(row.fights, CALIBRATION_FIGHTS)} из ${CALIBRATION_FIGHTS} боёв`"
+                >
+                  <span class="calibration-steps" aria-hidden="true">
+                    <i v-for="step in CALIBRATION_FIGHTS" :key="step" :class="{ done: step <= row.fights }"></i>
+                  </span>
+                  <span>Калибровка · {{ Math.min(row.fights, CALIBRATION_FIGHTS) }}/{{ CALIBRATION_FIGHTS }}</span>
                 </div>
               </td>
               <td class="num">{{ row.points }}</td>
@@ -100,7 +110,7 @@ const hasCalibrating = computed(() => rows.value.some((row) => row.is_calibratin
           </tbody>
         </table>
         </div>
-        <p v-if="hasCalibrating" class="small muted board-note">Калибровка — меньше 5 боёв. Такие игроки стоят ниже остальных, пока не сыграют пятый бой.</p>
+        <p v-if="hasCalibrating" class="small muted board-note">После {{ CALIBRATION_FIGHTS }} боёв игрок занимает место в рейтинге по очкам.</p>
       </div>
       <p v-else class="empty">{{ search ? 'Игроки с таким ником не найдены.' : 'В лиге пока нет активных игроков.' }}</p>
     </StateBlock>

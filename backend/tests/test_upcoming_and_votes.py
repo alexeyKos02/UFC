@@ -247,3 +247,21 @@ def test_vote_for_unknown_fight_and_kind(players):
     first, second, viewer = players(3)
     assert viewer.put("/fights/upcoming/planned/999/vote", {"player_id": first.id}).status_code == 404
     assert viewer.put("/fights/upcoming/bad/1/vote", {"player_id": first.id}).status_code == 422
+
+
+def test_new_title_fight_is_on_home_page_with_votes(admin, players):
+    first, second, witness = players(3)
+    created = schedule(admin, second, first)
+    assert created.status_code == 201, created.text
+    bouts = witness.get("/home").json()["title_fights"]
+    assert [bout["id"] for bout in bouts] == [created.json()["id"]]
+    assert bouts[0]["kind"] == "title"
+    assert bouts[0]["can_vote"] is True
+
+    vote = witness.put(f"/fights/upcoming/title/{bouts[0]['id']}/vote", {"player_id": first.id})
+    assert vote.status_code == 204
+    assert witness.get("/home").json()["title_fights"][0]["votes"]["my_vote"] == first.id
+
+    # После внесения результата бой уходит с главной.
+    first.post(f"/title-fights/{bouts[0]['id']}/result", result_body(first.id))
+    assert witness.get("/home").json()["title_fights"] == []
