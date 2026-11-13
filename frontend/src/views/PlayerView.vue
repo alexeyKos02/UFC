@@ -3,7 +3,9 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import { setAccount } from '../auth'
+import { BELT_MARK_LABELS, BELT_MARK_ORDER, beltMark } from '../beltMarks'
 import BeltIcon from '../components/BeltIcon.vue'
+import BeltMarkIcon from '../components/BeltMarkIcon.vue'
 import ChampionMark from '../components/ChampionMark.vue'
 import FightCard from '../components/FightCard.vue'
 import HeadToHead from '../components/HeadToHead.vue'
@@ -32,6 +34,12 @@ const chartHistory = computed(() => {
   if (chartPeriod.value === 'all') return all
   const since = Date.now() - MONTH_MS
   return all.filter((item) => new Date(item.fought_at).getTime() >= since)
+})
+/** Легенда под графиком: только то, что на нём есть. */
+const chartHasChampion = computed(() => chartHistory.value.some((item) => item.champion_after || item.champion_before))
+const chartBeltMarks = computed(() => {
+  const present = new Set(chartHistory.value.map(beltMark))
+  return BELT_MARK_ORDER.filter((mark) => present.has(mark))
 })
 
 type ResultFilter = 'all' | 'wins' | 'losses'
@@ -233,11 +241,17 @@ async function upload(event: Event, path: string): Promise<void> {
             </div>
             <RatingChart v-if="chartHistory.length" :history="chartHistory" :mode="chartMode" />
             <p v-else class="small muted">За последние 30 дней боёв не было.</p>
+            <div v-if="chartHasChampion || chartBeltMarks.length" class="chart-legend small muted">
+              <span v-if="chartHasChampion" class="chart-legend-item">
+                <span class="chart-legend-champion" aria-hidden="true"></span>с поясом чемпиона
+              </span>
+              <span v-for="mark in chartBeltMarks" :key="mark" class="chart-legend-item">
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><BeltMarkIcon :mark="mark" /></svg>
+                {{ BELT_MARK_LABELS[mark] }}
+              </span>
+            </div>
             <p class="small muted">
               {{ chartMode === 'points' ? 'Очки после каждого боя.' : 'Место в таблице рейтинга после каждого боя.' }}
-              <template v-if="chartHistory.some((item) => item.champion_after || item.champion_before)">
-                <span class="chart-legend-champion" aria-hidden="true"></span> — с поясом чемпиона.
-              </template>
               Масштаб: «+ / −», Ctrl + колесо или двумя пальцами.
             </p>
           </div>

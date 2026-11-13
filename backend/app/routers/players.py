@@ -5,7 +5,7 @@ from sqlalchemy.orm import aliased
 from app.db import utcnow
 from app.deps import CurrentUser, Db
 from app.errors import not_found
-from app.models import Fight, FightStatus, RatingChange, User, UserStatus
+from app.models import Belt, BeltKind, Fight, FightStatus, RatingChange, TitleFight, User, UserStatus
 from app.schemas import ProfileIn
 from app.serializers import (
     account_out,
@@ -89,8 +89,11 @@ def rating_history(player_id: int, _: CurrentUser, db: Db) -> dict:
         raise not_found("Игрок не найден")
     opponent = aliased(User)
     rows = db.execute(
-        select(RatingChange, Fight, opponent)
+        select(RatingChange, Fight, opponent, Belt.kind)
         .join(Fight, Fight.id == RatingChange.fight_id)
+        # Титульный бой и его пояс: на графике отмечаются защиты и попытки взять основной пояс.
+        .outerjoin(TitleFight, TitleFight.id == Fight.title_fight_id)
+        .outerjoin(Belt, Belt.id == TitleFight.belt_id)
         # Соперник — тот из пары, чьё это не начисление.
         .join(
             opponent,
@@ -114,8 +117,9 @@ def rating_history(player_id: int, _: CurrentUser, db: Db) -> dict:
             "table_place_after": change.table_place_after,
             "champion_before": change.champion_before,
             "champion_after": change.champion_after,
+            "main_title_fight": belt_kind == BeltKind.MAIN,
         }
-        for change, fight, rival in rows
+        for change, fight, rival, belt_kind in rows
     ]
     return {"points": points}
 

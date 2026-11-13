@@ -128,3 +128,28 @@ def test_rating_history_lists_points_and_places_in_order(admin, players):
 
     assert second.get(f"/players/{admin.id}/rating-history").json()["points"] == []
     assert second.get("/players/999999/rating-history").status_code == 404
+
+
+def test_rating_history_marks_main_title_fights(admin, players):
+    first, second, third = players(3)
+    play(first, second, first, FIGHT_TIME)
+    # Пояс вакантен: first берёт его, second — неудачная попытка.
+    play_title(schedule(admin, second, first).json(), first, second, first)
+    # Защита: champion first побеждает претендента third.
+    play_title(schedule(admin, third).json(), first, third, first)
+    # Потеря: third забирает пояс.
+    play_title(schedule(admin, third).json(), first, third, third)
+
+    history = second.get(f"/players/{first.id}/rating-history").json()["points"]
+    assert [item["main_title_fight"] for item in history] == [False, True, True, True]
+    assert [(item["champion_before"], item["champion_after"]) for item in history] == [
+        (False, False),
+        (False, True),
+        (True, True),
+        (True, False),
+    ]
+    challenger = first.get(f"/players/{second.id}/rating-history").json()["points"]
+    assert [(item["main_title_fight"], item["won"], item["champion_after"]) for item in challenger] == [
+        (False, False, False),
+        (True, False, False),
+    ]

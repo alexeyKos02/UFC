@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { formatBoutDate, formatShortDate, plural, signed } from '../format'
 import type { RatingHistoryPoint } from '../types'
+import BeltMarkIcon from './BeltMarkIcon.vue'
+import { beltMark } from '../beltMarks'
 
 /**
  * График очков или номера в таблице по боям игрока. По оси X — бои по порядку,
@@ -208,11 +210,12 @@ const championBands = computed(() => {
   return bands
 })
 
-/** Бои, после которых игрок получил пояс: над точкой рисуется корона. */
-const crowns = computed(() =>
-  points.value
-    .map((point, index) => ({ point, index }))
-    .filter(({ point, index }) => inView(index) && point.item && point.champion && !point.item.champion_before),
+/** События с основным поясом: над точкой боя рисуется значок (взял, защитил, потерял, не взял). */
+const beltMarks = computed(() =>
+  points.value.flatMap((point, index) => {
+    const mark = point.item && inView(index) ? beltMark(point.item) : null
+    return mark ? [{ point, index, mark }] : []
+  }),
 )
 
 const markers = computed(() =>
@@ -333,6 +336,8 @@ const tooltip = computed(() => {
   return { point, left, top, below: top < 80 }
 })
 
+const tooltipMark = computed(() => (tooltip.value?.point.item ? beltMark(tooltip.value.point.item) : null))
+
 const summary = computed(() => {
   const list = points.value
   if (!list.length) return ''
@@ -409,12 +414,11 @@ const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
           />
           <path class="chart-line" :d="path" />
         </g>
-        <path
-          v-for="crown in crowns"
-          :key="`crown-${crown.index}`"
-          class="chart-crown"
-          :transform="`translate(${x(crown.index) - 8}, ${Math.max(y(crown.point.value) - 22, 0)})`"
-          d="M1 11 L2.5 3 L6 7 L8 1 L10 7 L13.5 3 L15 11 Z M1.5 12.5 H14.5 V14.5 H1.5 Z"
+        <BeltMarkIcon
+          v-for="item in beltMarks"
+          :key="`belt-${item.index}`"
+          :mark="item.mark"
+          :transform="`translate(${x(item.index) - 8}, ${Math.max(y(item.point.value) - 22, 0)})`"
         />
         <circle
           v-for="{ point, index } in markers"
@@ -435,9 +439,11 @@ const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
             {{ tooltip.point.item.won ? 'над' : 'от' }} {{ tooltip.point.item.opponent.nickname }}
           </span>
           <span>{{ valueLabel(tooltip.point) }}<template v-if="mode === 'points'"> ({{ signed(tooltip.point.item.delta) }})</template></span>
-          <span v-if="tooltip.point.champion && !tooltip.point.item.champion_before" class="tone-gold">Завоевал пояс чемпиона</span>
+          <span v-if="tooltipMark === 'take'" class="tone-gold">Завоевал пояс чемпиона</span>
+          <span v-else-if="tooltipMark === 'defend'" class="tone-gold">Защитил пояс чемпиона</span>
+          <span v-else-if="tooltipMark === 'lose'" class="tone-minus">Потерял пояс чемпиона</span>
+          <span v-else-if="tooltipMark === 'fail'" class="muted">Титульный бой: пояс не взял</span>
           <span v-else-if="tooltip.point.champion" class="tone-gold">С поясом чемпиона</span>
-          <span v-else-if="tooltip.point.item.champion_before" class="tone-minus">Потерял пояс чемпиона</span>
         </template>
         <template v-else>
           <span class="small muted">До первого боя</span>

@@ -424,4 +424,6 @@ export interface RatingHistoryPoint {
   table_place_after: number | null
   champion_before: boolean
   champion_after: boolean
+  /** Титульный бой за основной пояс: по нему отмечаются защиты и неудачные попытки. */
+  main_title_fight: boolean
 }
