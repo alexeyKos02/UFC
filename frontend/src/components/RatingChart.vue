@@ -29,7 +29,15 @@ const width = ref(600)
 const active = ref<number | null>(null)
 let observer: ResizeObserver | null = null
 
+/** На телефоне нет «ухода» указателя с графика: подсказку закрывает касание в любом другом месте. */
+function closeOnOutsideTap(event: PointerEvent): void {
+  const svg = box.value?.querySelector('svg')
+  if (svg && event.target instanceof Node && svg.contains(event.target)) return
+  active.value = null
+}
+
 onMounted(() => {
+  document.addEventListener('pointerdown', closeOnOutsideTap)
   if (!box.value) return
   width.value = box.value.clientWidth
   observer = new ResizeObserver(([entry]) => {
@@ -37,7 +45,10 @@ onMounted(() => {
   })
   observer.observe(box.value)
 })
-onBeforeUnmount(() => observer?.disconnect())
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeOnOutsideTap)
+  observer?.disconnect()
+})
 
 interface Point {
   value: number
