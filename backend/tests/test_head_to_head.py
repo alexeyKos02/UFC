@@ -47,8 +47,8 @@ def test_no_head_to_head_on_own_profile_and_before_first_fight(players):
 
 def test_unconfirmed_and_other_fights_are_not_counted(players):
     me, rival, other = players(3)
-    create_fight(me, rival, me)
-    play(me, other, me)
+    play(me, other, me, FIGHT_TIME)
+    create_fight(me, rival, me, FIGHT_TIME + timedelta(hours=1))
     assert h2h(me, rival)["fights"] == 0
 
 

@@ -20,6 +20,7 @@ from app.models import (
     User,
 )
 from app.schemas import (
+    AcceptIn,
     AdjustmentCancelIn,
     AdjustmentIn,
     BeltAwardIn,
@@ -34,6 +35,9 @@ from app.schemas import (
 )
 from app.serializers import (
     admin_user_out,
+    backdated_out,
+    blocked_out,
+    fight_brief,
     belt_detail,
     belt_out,
     fight_detail,
@@ -48,6 +52,7 @@ from app.services import (
     accounts,
     adjustments,
     belts,
+    fight_order,
     promos,
     rating,
     special_places,
@@ -55,6 +60,7 @@ from app.services import (
     tournaments,
     uploads,
 )
+from app.services import fights as fight_service
 from app.services.rating import UPSET_GAP
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_staff)])
@@ -92,6 +98,39 @@ def start_tournament(tournament_id: int, viewer: StaffUser, db: Db) -> dict:
 @router.post("/tournaments/{tournament_id}/cancel")
 def cancel_tournament(tournament_id: int, body: CancelIn, viewer: StaffUser, db: Db) -> dict:
     return tournament_detail(db, tournaments.cancel(db, tournament_id, body.reason), viewer)
+
+
+# Зависшие бои
+
+
+@router.get("/fights/open")
+def admin_open_fights(viewer: StaffUser, db: Db) -> list[dict]:
+    """Бои без итога от самых ранних: кого ждём, сколько боёв стоит из-за каждого."""
+    fights = db.scalars(
+        select(Fight).where(Fight.status.in_(fight_order.OPEN_STATUSES)).order_by(Fight.fought_at, Fight.id)
+    ).all()
+    waiting = {user.id: user for user in db.scalars(select(User))}
+    return [
+        {
+            **fight_brief(fight, viewer),
+            "created_at": fight.created_at,
+            "waiting_for": [player_brief(waiting[user_id]) for user_id in fight_order.waiting_for(fight)],
+            "blocks_count": fight_order.blocks_count(db, fight),
+            "blocked_by": blocked_out(fight_order.blocked_info(db, fight)),
+            "backdated": backdated_out(fight_order.backdated_info(db, fight)),
+        }
+        for fight in fights
+    ]
+
+
+@router.post("/fights/{fight_id}/accept")
+def admin_accept_fight(fight_id: int, body: AcceptIn, viewer: StaffUser, db: Db) -> dict:
+    return fight_detail(fight_service.admin_accept(db, viewer, fight_id, body.reason), viewer)
+
+
+@router.post("/fights/{fight_id}/cancel")
+def admin_cancel_fight(fight_id: int, body: CancelIn, viewer: StaffUser, db: Db) -> dict:
+    return fight_detail(fight_service.admin_cancel(db, viewer, fight_id, body.reason), viewer)
 
 
 # Пояса

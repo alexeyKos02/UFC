@@ -8,7 +8,7 @@ from app.db import utcnow
 from app.errors import bad_request, conflict, forbidden, not_found
 from app.models import Fight, FightConfirmation, FightKind, FightStatus, User, UserStatus
 from app.schemas import FightCorrectIn, FightCreateIn
-from app.services import rating, title_fights, tournaments
+from app.services import fight_order, rating, title_fights, tournaments
 from app.services.fight_records import (
     add_version,
     apply_version_fields,
@@ -75,6 +75,7 @@ def confirm(db: Session, actor: User, fight_id: int, version_no: int) -> Fight:
         return fight
 
     ensure_players_active(db, [fight.player1_id, fight.player2_id])
+    _ensure_can_finalize(db, fight)
     db.add(FightConfirmation(version_id=version.id, player_id=actor.id))
     confirmed_by.add(actor.id)
     db.flush()
@@ -82,6 +83,12 @@ def confirm(db: Session, actor: User, fight_id: int, version_no: int) -> Fight:
         _finalize(db, fight)
     db.commit()
     return fight
+
+
+def _ensure_can_finalize(db: Session, fight: Fight) -> None:
+    """Очки считаются по порядку подтверждения, поэтому он должен совпадать с порядком боёв."""
+    fight_order.ensure_confirmable_date(db, fight)
+    fight_order.ensure_in_order(db, fight)
 
 
 def _finalize(db: Session, fight: Fight) -> None:
@@ -156,11 +163,48 @@ def correct(db: Session, actor: User, fight_id: int, data: FightCorrectIn) -> Fi
         raise conflict(STALE_VERSION)
     validate_result(data, fight.player1_id, fight.player2_id)
     ensure_players_active(db, [fight.player1_id, fight.player2_id])
+    fight_order.ensure_not_backdated(db, [fight.player1_id, fight.player2_id], data.fought_at, fight.id)
     new_version_no = fight.current_version_no + 1
     # Старые подтверждения привязаны к прошлой версии и перестают учитываться автоматически.
     add_version(db, fight, actor, data, new_version_no)
     fight.current_version_no = new_version_no
     apply_version_fields(fight, data)
     fight.status = FightStatus.PENDING
+    db.commit()
+    return fight
+
+
+def admin_accept(db: Session, actor: User, fight_id: int, reason: str | None) -> Fight:
+    """Админ засчитывает зависший бой в текущей версии, не дожидаясь игроков."""
+    rating.acquire_rating_lock(db)
+    fight = _lock_fight(db, fight_id)
+    if fight.status == FightStatus.CONFIRMED:
+        return fight
+    if fight.status not in (FightStatus.PENDING, FightStatus.DISPUTED):
+        raise conflict("Этот бой уже отменён")
+    ensure_players_active(db, [fight.player1_id, fight.player2_id])
+    _ensure_can_finalize(db, fight)
+    fight.resolved_by_id = actor.id
+    fight.resolution_reason = reason
+    fight.resolved_at = utcnow()
+    _finalize(db, fight)
+    db.commit()
+    return fight
+
+
+def admin_cancel(db: Session, actor: User, fight_id: int, reason: str) -> Fight:
+    """Админ отменяет зависший бой. Анонс, титульный бой или матч турнира снова ждут результата."""
+    fight = _lock_fight(db, fight_id)
+    if fight.status == FightStatus.CANCELLED:
+        return fight
+    if fight.status == FightStatus.CONFIRMED:
+        raise conflict("Подтверждённый бой отменить нельзя")
+    fight.status = FightStatus.CANCELLED
+    fight.resolved_by_id = actor.id
+    fight.resolution_reason = reason
+    fight.resolved_at = utcnow()
+    fight.planned_fight_id = None
+    fight.title_fight_id = None
+    fight.tournament_match_id = None
     db.commit()
     return fight

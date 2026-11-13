@@ -72,6 +72,10 @@ class CancelIn(BaseModel):
     reason: Reason
 
 
+class AcceptIn(BaseModel):
+    reason: Reason | None = None
+
+
 class BeltIn(BaseModel):
     name: BeltName
 

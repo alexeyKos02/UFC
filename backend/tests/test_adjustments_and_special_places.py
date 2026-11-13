@@ -125,11 +125,11 @@ def test_rejects_player_unconfirmed_and_non_upset(admin, players):
     url = f"/admin/rating/adjustments/{fight['id']}"
     assert bottom.put(url, body(bottom, 2)).status_code == 403
 
-    pending = create_fight(apis[1], apis[2], apis[1]).json()
-    assert admin.put(f"/admin/rating/adjustments/{pending['id']}", body(apis[1], 2)).status_code == 409
-
     regular = play(apis[1], apis[2], apis[1])
     assert admin.put(f"/admin/rating/adjustments/{regular['id']}", body(apis[1], 2)).status_code == 409
+
+    pending = create_fight(apis[1], apis[2], apis[1]).json()
+    assert admin.put(f"/admin/rating/adjustments/{pending['id']}", body(apis[1], 2)).status_code == 409
     assert admin.put(url, body(apis[1], 2)).status_code == 400
     assert admin.put(url, body(bottom, 0)).status_code == 400
 

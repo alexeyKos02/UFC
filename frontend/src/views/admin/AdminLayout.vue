@@ -10,6 +10,7 @@ import { isOwner } from '../../auth'
       <RouterLink to="/admin/tournaments">Турниры</RouterLink>
       <RouterLink to="/admin/belts">Пояса</RouterLink>
       <RouterLink to="/admin/title-fights">Титульные бои</RouterLink>
+      <RouterLink to="/admin/fights">Бои без итога</RouterLink>
       <RouterLink to="/admin/rating">Рейтинг</RouterLink>
       <RouterLink to="/admin/promos">Промоплашки</RouterLink>
       <RouterLink v-if="isOwner" to="/admin/users">Роли и блокировки</RouterLink>

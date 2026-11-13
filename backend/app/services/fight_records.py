@@ -9,6 +9,7 @@ from app.db import utcnow
 from app.errors import bad_request, conflict, not_found
 from app.models import Fight, FightConfirmation, FightKind, FightVersion, User, UserStatus
 from app.schemas import FightResultIn
+from app.services import fight_order
 
 FUTURE_TOLERANCE = timedelta(minutes=10)
 
@@ -72,6 +73,7 @@ def create_fight_record(
 ) -> Fight:
     validate_result(data, player1_id, player2_id)
     ensure_players_active(db, [player1_id, player2_id])
+    fight_order.ensure_not_backdated(db, [player1_id, player2_id], data.fought_at)
     fight = Fight(
         kind=kind,
         player1_id=player1_id,

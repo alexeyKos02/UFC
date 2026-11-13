@@ -20,7 +20,8 @@ async function refreshCounter(): Promise<void> {
   if (!currentUser.value) return
   try {
     const mine = await api.get<MyFights>('/fights/mine')
-    toConfirm.value = mine.to_confirm.length
+    // В счётчике и бои на подтверждение, и мои бои без итога, из-за которых ждут другие.
+    toConfirm.value = new Set([...mine.to_confirm, ...mine.blocking.map((item) => item.fight)].map((fight) => fight.id)).size
   } catch {
     toConfirm.value = 0
   }

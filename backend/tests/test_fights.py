@@ -181,9 +181,12 @@ def test_statistics_streak_and_rivals(players):
 
 def test_streak_uses_fight_time_not_insertion_order(players):
     me, rival = players(2)
-    play(me, rival, me, FIGHT_TIME + timedelta(hours=1))
-    play(me, rival, rival, FIGHT_TIME + timedelta(hours=2))
-    play(me, rival, me, FIGHT_TIME)
+    # Записаны не по порядку, а подтверждены по дате боя: иначе подтвердить нельзя.
+    middle = create_fight(me, rival, me, FIGHT_TIME + timedelta(hours=1)).json()
+    last = create_fight(me, rival, rival, FIGHT_TIME + timedelta(hours=2)).json()
+    first = create_fight(me, rival, me, FIGHT_TIME).json()
+    for fight in (first, middle, last):
+        assert confirm(rival, fight).status_code == 200
     assert me.profile()["stats"]["best_streak"] == 2
 
 
@@ -222,3 +225,17 @@ def test_future_tolerance_allows_now(players):
         },
     )
     assert response.status_code == 201
+
+
+def test_open_fights_list_earlier_fights_first(players):
+    first, second = players(2)
+    late = create_fight(first, second, first, FIGHT_TIME + timedelta(hours=2)).json()
+    early = create_fight(first, second, second, FIGHT_TIME).json()
+    same_time = create_fight(first, second, first, FIGHT_TIME + timedelta(hours=2)).json()
+    inbox = second.get("/fights/mine").json()
+    assert [item["id"] for item in inbox["to_confirm"]] == [early["id"], late["id"], same_time["id"]]
+    assert [item["id"] for item in first.get("/fights/mine").json()["waiting"]] == [
+        early["id"],
+        late["id"],
+        same_time["id"],
+    ]

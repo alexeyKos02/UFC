@@ -354,12 +354,17 @@ class Fight(Base):
     title_fight_id: Mapped[int | None] = mapped_column(ForeignKey("title_fights.id"), unique=True)
     planned_fight_id: Mapped[int | None] = mapped_column(ForeignKey("planned_fights.id"), unique=True)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Решение админа по зависшему бою: засчитал (status confirmed) или отменил (cancelled).
+    resolved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    resolution_reason: Mapped[str | None] = mapped_column(Text)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
 
     player1: Mapped[User] = relationship(foreign_keys=[player1_id])
     player2: Mapped[User] = relationship(foreign_keys=[player2_id])
     initiator: Mapped[User] = relationship(foreign_keys=[initiator_id])
+    resolved_by: Mapped[User | None] = relationship(foreign_keys=[resolved_by_id])
     winner: Mapped[User] = relationship(foreign_keys=[winner_id])
     loser: Mapped[User] = relationship(foreign_keys=[loser_id])
     versions: Mapped[list["FightVersion"]] = relationship(

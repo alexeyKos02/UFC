@@ -1,3 +1,4 @@
+import itertools
 import os
 import tempfile
 import uuid
@@ -143,8 +144,17 @@ def iso(moment: datetime | None = None) -> str:
     return (moment or FIGHT_TIME).isoformat()
 
 
+# Бои задним числом записывать нельзя, поэтому бой без явной даты получает следующую по порядку:
+# позже FIGHT_TIME и любых сдвигов на часы и дни от него, но всё равно в прошлом.
+_default_clock = itertools.count()
+
+
+def next_fight_time() -> datetime:
+    return FIGHT_TIME + timedelta(days=200, minutes=next(_default_clock))
+
+
 def result_body(winner_id: int, moment: datetime | None = None, **extra) -> dict:
-    return {"fought_at": iso(moment), "winner_id": winner_id, **extra}
+    return {"fought_at": iso(moment or next_fight_time()), "winner_id": winner_id, **extra}
 
 
 def create_fight(initiator: Api, opponent: Api, winner: Api, moment: datetime | None = None, **extra):

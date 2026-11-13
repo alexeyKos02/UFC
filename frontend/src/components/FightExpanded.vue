@@ -138,6 +138,9 @@ function positive(value: number): number {
         </div>
 
         <p v-if="fight.adjustment" class="preview">Причина ручной корректировки: {{ fight.adjustment.reason }}</p>
+        <p v-if="fight.resolution" class="preview">
+          {{ fight.resolution.accepted ? 'Засчитан' : 'Отменён' }} администратором {{ fight.resolution.by.nickname }}<template v-if="fight.resolution.reason">: {{ fight.resolution.reason }}</template>
+        </p>
 
         <details class="bout-versions" :open="fight.versions.length > 1">
           <summary>История версий: {{ fight.versions.length }}</summary>

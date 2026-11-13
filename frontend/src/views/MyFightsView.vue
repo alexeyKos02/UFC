@@ -8,9 +8,14 @@ import StateBlock from '../components/StateBlock.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import UpcomingBoutCard from '../components/UpcomingBoutCard.vue'
 import { useLoad } from '../feedback'
-import type { MyFights } from '../types'
+import { formatBoutDate, plural } from '../format'
+import type { FightBrief, MyFights, PlayerBrief } from '../types'
 
 const { data, error, loading, reload } = useLoad(() => api.get<MyFights>('/fights/mine'))
+
+function opponentOf(fight: FightBrief): PlayerBrief {
+  return fight.player1.id === currentUser.value?.id ? fight.player2 : fight.player1
+}
 </script>
 
 <template>
@@ -24,8 +29,22 @@ const { data, error, loading, reload } = useLoad(() => api.get<MyFights>('/fight
     </div>
     <StateBlock :loading="loading" :error="error" skeleton="list">
       <template v-if="data">
+        <section v-if="data.blocking.length" class="blocking-banner" role="status">
+          <h2>Вы задерживаете бои других игроков</h2>
+          <p class="small">Очки считаются по порядку боёв, поэтому их более поздние бои нельзя подтвердить, пока у вашего нет итога.</p>
+          <ul>
+            <li v-for="item in data.blocking" :key="item.fight.id">
+              <RouterLink class="link" :to="`/fights/${item.fight.id}`">
+                Бой с {{ opponentOf(item.fight).nickname }} от {{ formatBoutDate(item.fight.fought_at) }}</RouterLink>:
+              {{ item.fight.status === 'disputed' ? 'исправьте запись' : 'подтвердите или оспорьте' }}.
+              Ждут: {{ item.delayed_players.map((player) => player.nickname).join(', ') }}
+              ({{ item.delayed_fights }} {{ plural(item.delayed_fights, ['бой', 'боя', 'боёв']) }}).
+            </li>
+          </ul>
+        </section>
         <section class="section" data-tour="to-confirm">
           <h2>На подтверждение</h2>
+          <p v-if="data.to_confirm.length > 1" class="small muted">Сверху — более ранние бои. Подтверждайте по порядку: очки считаются в том порядке, в каком бои подтверждены.</p>
           <div v-if="data.to_confirm.length" class="stack" style="gap: 16px">
             <FightCard v-for="fight in data.to_confirm" :key="fight.id" :fight="fight" actions @changed="reload" />
           </div>
