@@ -220,29 +220,20 @@ def test_new_registration_shares_starting_points(players):
     assert table_of(late)[late.id]["display_place"] == 2
 
 
-def test_parallel_final_confirmations_keep_fight_order(players):
-    """Параллельные подтверждения проходят только по порядку боёв, цепочка снимков points_before не рвётся."""
+def test_parallel_final_confirmations_use_sequential_state(players):
+    """Каждый расчёт видит очки после предыдущего: цепочка снимков points_before не рвётся."""
     apis = players(8)
     hub, *others = apis
-    fights = [
-        create_fight(hub, other, hub, FIGHT_TIME + timedelta(minutes=index)).json()
-        for index, other in enumerate(others)
-    ]
+    fights = [create_fight(hub, other, hub).json() for other in others]
     with ThreadPoolExecutor(len(others)) as pool:
         responses = list(pool.map(lambda pair: confirm(pair[0], pair[1]), zip(others, fights, strict=True)))
-    codes = [response.status_code for response in responses]
-    assert set(codes) <= {200, 409}
-    # Прошли только самые ранние бои подряд, без пропусков.
-    passed = codes.count(200)
-    assert passed >= 1 and codes == [200] * passed + [409] * (len(codes) - passed)
-
-    for other, fight in list(zip(others, fights, strict=True))[passed:]:
-        assert confirm(other, fight).status_code == 200
+    assert {response.status_code for response in responses} == {200}
 
     snapshots = []
     for fight in fights:
         detail = hub.get(f"/fights/{fight['id']}").json()
         snapshots.append(next(item for item in detail["rating_changes"] if item["player"]["id"] == hub.id))
+    snapshots.sort(key=lambda item: item["points_before"])
     assert snapshots[0]["points_before"] == 1000
     for previous, current in zip(snapshots, snapshots[1:], strict=False):
         assert current["points_before"] == previous["points_after"]

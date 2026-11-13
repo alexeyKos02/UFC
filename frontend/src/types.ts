@@ -115,20 +115,6 @@ export interface FightBrief {
   can_dispute: boolean
   can_correct: boolean
   dispute_reason: string | null
-  /** Только в «Моих боях», на странице боя и в админке: более ранний бой без итога, из-за которого этот нельзя подтвердить. */
-  blocked_by?: FightBlocker | null
-  /** Бой сыгран раньше уже подтверждённого боя участника: подтвердить нельзя, только исправить дату или отменить. */
-  backdated?: { player: PlayerBrief; latest_fought_at: string } | null
-}
-
-export interface FightBlocker {
-  fight_id: number
-  fought_at: string
-  player1: PlayerBrief
-  player2: PlayerBrief
-  status: FightStatus
-  /** Кто должен сделать следующий шаг по раннему бою. */
-  waiting_for: PlayerBrief[]
 }
 
 /** Решение админа по зависшему бою. */
@@ -139,16 +125,9 @@ export interface FightResolution {
   accepted: boolean
 }
 
-export interface BlockingItem {
-  fight: FightBrief
-  delayed_players: PlayerBrief[]
-  delayed_fights: number
-}
-
 export interface OpenFightRow extends FightBrief {
   created_at: string
   waiting_for: PlayerBrief[]
-  blocks_count: number
 }
 
 export interface FightVersion {
@@ -296,8 +275,6 @@ export interface MyFights {
   disputed: FightBrief[]
   matches: MatchOut[]
   upcoming: UpcomingBout[]
-  /** Мои бои без итога, из-за которых ждут более поздние бои других игроков. */
-  blocking: BlockingItem[]
 }
 
 export interface LeagueRow {

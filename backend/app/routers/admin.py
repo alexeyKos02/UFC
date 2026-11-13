@@ -35,8 +35,6 @@ from app.schemas import (
 )
 from app.serializers import (
     admin_user_out,
-    backdated_out,
-    blocked_out,
     fight_brief,
     belt_detail,
     belt_out,
@@ -105,7 +103,7 @@ def cancel_tournament(tournament_id: int, body: CancelIn, viewer: StaffUser, db:
 
 @router.get("/fights/open")
 def admin_open_fights(viewer: StaffUser, db: Db) -> list[dict]:
-    """Бои без итога от самых ранних: кого ждём, сколько боёв стоит из-за каждого."""
+    """Бои без итога от самых ранних и кого по каждому ждём."""
     fights = db.scalars(
         select(Fight).where(Fight.status.in_(fight_order.OPEN_STATUSES)).order_by(Fight.fought_at, Fight.id)
     ).all()
@@ -115,9 +113,6 @@ def admin_open_fights(viewer: StaffUser, db: Db) -> list[dict]:
             **fight_brief(fight, viewer),
             "created_at": fight.created_at,
             "waiting_for": [player_brief(waiting[user_id]) for user_id in fight_order.waiting_for(fight)],
-            "blocks_count": fight_order.blocks_count(db, fight),
-            "blocked_by": blocked_out(fight_order.blocked_info(db, fight)),
-            "backdated": backdated_out(fight_order.backdated_info(db, fight)),
         }
         for fight in fights
     ]

@@ -421,21 +421,6 @@ def admin_user_out(user: User, special: SpecialPlace | None = None) -> dict:
     return {**account_out(user), "created_at": user.created_at, "special_place": special.place if special else None}
 
 
-def blocked_out(info: dict | None) -> dict | None:
-    """Почему бой пока нельзя подтвердить: более ранний бой без итога и кого по нему ждём."""
-    if info is None:
-        return None
-    fight: Fight = info["fight"]
-    return {
-        "fight_id": fight.id,
-        "fought_at": fight.fought_at,
-        "player1": player_brief(fight.player1),
-        "player2": player_brief(fight.player2),
-        "status": fight.status.value,
-        "waiting_for": [player_brief(user) for user in info["waiting_for"]],
-    }
-
-
 def resolution_out(fight: Fight) -> dict | None:
     if fight.resolved_by_id is None:
         return None
@@ -445,10 +430,3 @@ def resolution_out(fight: Fight) -> dict | None:
         "at": fight.resolved_at,
         "accepted": fight.status == FightStatus.CONFIRMED,
     }
-
-
-def backdated_out(info: dict | None) -> dict | None:
-    """Бой сыгран раньше уже подтверждённого боя участника: его можно только исправить или отменить."""
-    if info is None:
-        return None
-    return {"player": player_brief(info["player"]), "latest_fought_at": info["latest_fought_at"]}

@@ -6,7 +6,7 @@ import Modal from '../../components/Modal.vue'
 import StateBlock from '../../components/StateBlock.vue'
 import StatusBadge from '../../components/StatusBadge.vue'
 import { useAction, useLoad } from '../../feedback'
-import { formatBoutDate, formatDateTime, methodLabel, plural } from '../../format'
+import { formatBoutDate, formatDateTime, methodLabel } from '../../format'
 import type { OpenFightRow } from '../../types'
 
 const list = useLoad(() => api.get<OpenFightRow[]>('/admin/fights/open'))
@@ -50,8 +50,7 @@ async function cancel(): Promise<void> {
   <section class="section">
     <h2>Бои без итога</h2>
     <p class="small muted">
-      Бои ждут подтверждения или исправления, самые ранние сверху. Очки считаются по порядку боёв, поэтому более поздние бои
-      тех же игроков нельзя подтвердить, пока у раннего нет итога. Зависший бой можно засчитать в текущей версии или отменить.
+      Бои ждут подтверждения или исправления, самые ранние сверху. Зависший бой можно засчитать в текущей версии или отменить.
       Отменённый титульный или турнирный бой снова ждёт результата.
     </p>
     <StateBlock :loading="list.loading.value" :error="list.error.value" skeleton="list">
@@ -69,19 +68,10 @@ async function cancel(): Promise<void> {
           </p>
           <p class="small">
             Ждём: <b>{{ row.waiting_for.map((player) => player.nickname).join(', ') || '—' }}</b>
-            <template v-if="row.blocks_count"> · из-за него стоят {{ row.blocks_count }} {{ plural(row.blocks_count, ['бой', 'боя', 'боёв']) }}</template>
           </p>
           <p v-if="row.dispute_reason" class="small tone-red">Причина спора: {{ row.dispute_reason }}</p>
-          <p v-if="row.backdated" class="bout-blocked small">
-            Сыгран раньше уже подтверждённого боя игрока {{ row.backdated.player.nickname }} (от {{ formatBoutDate(row.backdated.latest_fought_at) }}).
-            Засчитать нельзя — только отменить, или автор исправит дату.
-          </p>
-          <p v-else-if="row.blocked_by" class="bout-blocked small">
-            Сначала нужен итог боя #{{ row.blocked_by.fight_id }}: {{ row.blocked_by.player1.nickname }} — {{ row.blocked_by.player2.nickname }}
-            от {{ formatBoutDate(row.blocked_by.fought_at) }}.
-          </p>
           <div class="row">
-            <button class="btn sm primary" :disabled="busy || Boolean(row.blocked_by) || Boolean(row.backdated)" @click="accepting = row">Засчитать</button>
+            <button class="btn sm primary" :disabled="busy" @click="accepting = row">Засчитать</button>
             <button class="btn sm danger" :disabled="busy" @click="cancelling = row">Отменить</button>
           </div>
         </article>

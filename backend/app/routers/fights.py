@@ -20,8 +20,7 @@ from app.schemas import (
     PlannedFightIn,
     VoteIn,
 )
-from app.serializers import backdated_out, blocked_out, fight_brief, fight_detail, match_out, player_brief, upcoming_out
-from app.services import fight_order
+from app.serializers import fight_brief, fight_detail, match_out, upcoming_out
 from app.services import fights as fight_service
 from app.services import upcoming as upcoming_service
 from app.services.stats import fight_comparison
@@ -89,11 +88,7 @@ def my_fights(viewer: CurrentUser, db: Db) -> dict:
         .order_by(Fight.fought_at, Fight.id)
     ).all()
     briefs = [
-        {
-            **fight_brief(fight, viewer),
-            "blocked_by": blocked_out(fight_order.blocked_info(db, fight)),
-            "backdated": backdated_out(fight_order.backdated_info(db, fight)),
-        }
+fight_brief(fight, viewer)
         for fight in open_fights
     ]
 
@@ -123,14 +118,6 @@ def my_fights(viewer: CurrentUser, db: Db) -> dict:
         "disputed": [item for item in briefs if item["status"] == "disputed"],
         "matches": [match_out(match, viewer) for match in matches],
         "upcoming": upcoming,
-        "blocking": [
-            {
-                "fight": fight_brief(item["fight"], viewer),
-                "delayed_players": [player_brief(user) for user in item["delayed_players"]],
-                "delayed_fights": item["delayed_fights"],
-            }
-            for item in fight_order.blocking_report(db, viewer)
-        ],
     }
 
 
@@ -141,12 +128,7 @@ def get_fight(fight_id: int, viewer: CurrentUser, db: Db) -> dict:
         raise not_found("Бой не найден")
     if fight.status != FightStatus.CONFIRMED and not (fight.has_player(viewer.id) or viewer.is_staff):
         raise forbidden("Бой ещё не подтверждён, он виден только участникам")
-    return {
-        **fight_detail(fight, viewer),
-        "comparison": fight_comparison(db, fight),
-        "blocked_by": blocked_out(fight_order.blocked_info(db, fight)),
-        "backdated": backdated_out(fight_order.backdated_info(db, fight)),
-    }
+    return {**fight_detail(fight, viewer), "comparison": fight_comparison(db, fight)}
 
 
 @router.post("/{fight_id}/confirm")

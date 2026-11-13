@@ -1912,39 +1912,6 @@ th.num {
   gap: 8px;
 }
 
-/* «Мои бои»: я задерживаю чужие бои. */
-.blocking-banner {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--amber);
-  border-left-width: 4px;
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.blocking-banner h2 {
-  margin: 0;
-  font-size: 20px;
-  color: var(--amber);
-}
-
-.blocking-banner ul {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding-left: 18px;
-}
-
-.bout-blocked {
-  padding: 8px 10px;
-  border-left: 3px solid var(--amber);
-  background: var(--surface-2);
-  color: var(--text-2);
-}
-
 /* Переключатель фильтра: одна кнопка нажата. */
 .filter-chips {
   display: flex;
