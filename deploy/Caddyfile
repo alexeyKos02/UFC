@@ -1,5 +1,10 @@
-# HTTPS перед сайтом. Сертификат Let's Encrypt Caddy получает и продлевает сам,
-# http:// перенаправляет на https://. Домен задаётся в .env: SITE_DOMAIN=ufcliga.ru.
+# HTTPS перед сайтом. Сертификаты Let's Encrypt Caddy получает и продлевает сам,
+# http:// перенаправляет на https://. Домены задаются в .env:
+#   SITE_DOMAIN=ufclegends.ru                    основной домен
+#   SITE_REDIRECTS="www.ufclegends.ru ufcliga.ru www.ufcliga.ru"
+#                                                эти адреса ведут на основной
+# Без SITE_REDIRECTS на основной домен ведёт только www.<SITE_DOMAIN>.
+# Каждый адрес должен уже резолвиться в IP сервера, иначе сертификат не выпустится.
 
 {$SITE_DOMAIN} {
 	encode zstd gzip
@@ -7,7 +12,7 @@
 	reverse_proxy frontend:80
 }
 
-www.{$SITE_DOMAIN} {
+{$SITE_REDIRECTS} {
 	redir https://{$SITE_DOMAIN}{uri} permanent
 }
 

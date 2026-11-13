@@ -59,6 +59,7 @@ services:
       - "443:443/udp"
     environment:
       SITE_DOMAIN: ${SITE_DOMAIN:-}
+      SITE_REDIRECTS: ${SITE_REDIRECTS:-www.${SITE_DOMAIN:-}}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
