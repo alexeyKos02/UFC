@@ -138,6 +138,11 @@ function positive(value: number): number {
         </div>
 
         <p v-if="fight.adjustment" class="preview">Причина ручной корректировки: {{ fight.adjustment.reason }}</p>
+        <p v-if="fight.recalculated" class="preview">
+          Очки пересчитаны {{ formatDateTime(fight.recalculated.at) }}: позже подтвердили бой, сыгранный раньше этого<template v-if="fight.recalculated.because_fight_id">
+            (<RouterLink class="link" :to="`/fights/${fight.recalculated.because_fight_id}`">бой #{{ fight.recalculated.because_fight_id }}</RouterLink>)</template>.
+          Очки считаются по дате боя.
+        </p>
         <p v-if="fight.resolution" class="preview">
           {{ fight.resolution.accepted ? 'Засчитан' : 'Отменён' }} администратором {{ fight.resolution.by.nickname }}<template v-if="fight.resolution.reason">: {{ fight.resolution.reason }}</template>
         </p>

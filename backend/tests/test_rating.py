@@ -175,16 +175,13 @@ def test_discount_works_for_two_losses_to_the_same_opponent_per_week(players):
 
 
 def test_discount_returns_after_a_week(players):
-    from app.db import SessionLocal
-    from app.models import Fight
-
+    """Окно скидки считается по дате боя: через 7 дней после поражения скидка возвращается."""
     first, second = players(2)
-    for _ in range(2):
-        play(first, second, first)
-    with SessionLocal() as db:
-        db.query(Fight).update({Fight.confirmed_at: Fight.confirmed_at - timedelta(days=7, minutes=1)})
-        db.commit()
-    fight = play(first, second, first)
+    for hour in range(2):
+        play(first, second, first, FIGHT_TIME + timedelta(hours=hour))
+    third = play(first, second, first, FIGHT_TIME + timedelta(hours=3))
+    assert next(item for item in third["rating_changes"] if item["player"]["id"] == second.id)["loss_discount"] == 0
+    fight = play(first, second, first, FIGHT_TIME + timedelta(days=7, hours=1))
     assert next(item for item in fight["rating_changes"] if item["player"]["id"] == second.id)["loss_discount"] > 0
 
 
@@ -192,12 +189,14 @@ def test_k_drops_after_ten_fights(players):
     veteran, sparring, fresh = players(3)
     for hour in range(10):
         play(veteran, sparring, sparring if hour % 2 else veteran, FIGHT_TIME + timedelta(hours=hour))
-    set_points([veteran, fresh])
     before = veteran.points()
     fight = play(veteran, fresh, veteran, FIGHT_TIME + timedelta(hours=10))
-    assert veteran.points() - before == fight_points(1000, 1000, K_EXPERIENCED, K_NEW, True).gain == 16
+    expected = fight_points(before, 1000, K_EXPERIENCED, K_NEW, True)
+    assert veteran.points() - before == expected.gain
     loser = next(item for item in fight["rating_changes"] if item["player"]["id"] == fresh.id)
-    assert loser["delta"] == -18
+    assert loser["delta"] == -expected.loss
+    # Проигравший — новичок: потеря считается с его K = 48, а не с K победителя.
+    assert expected.loss == fight_points(before, 1000, K_NEW, K_NEW, True).loss
 
 
 def test_activity_lets_an_even_player_grow(players):

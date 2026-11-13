@@ -278,12 +278,7 @@ def on_fight_confirmed(db: Session, fight: Fight) -> None:
         tournament.winner_id = fight.winner_id
         tournament.finished_at = utcnow()
         belts.award(db, tournament.belt_id, fight, tournament_id=tournament.id)
-        # Вызов идёт под замком рейтинга, который взяло финальное подтверждение.
-        db.execute(
-            update(User)
-            .where(User.id == fight.winner_id)
-            .values(rating_points=User.rating_points + tournament.win_points)
-        )
+        # Приз турнира (win_points) начисляет пересчёт очков сразу после этого вызова.
     else:
         next_match = db.scalar(
             select(TournamentMatch)

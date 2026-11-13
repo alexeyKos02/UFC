@@ -173,6 +173,8 @@ export interface FightDetail extends FightBrief {
   adjustment: FightAdjustment | null
   is_title_defense: boolean | null
   resolution: FightResolution | null
+  /** Очки пересчитаны: позже подтвердили бой, сыгранный раньше этого. */
+  recalculated: { at: string; because_fight_id: number | null } | null
   comparison?: {
     head_to_head: [number, number]
     league_wins: [number, number]

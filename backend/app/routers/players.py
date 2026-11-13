@@ -84,7 +84,7 @@ def player_fights(player_id: int, viewer: CurrentUser, db: Db) -> list[dict]:
 
 @router.get("/players/{player_id}/rating-history")
 def rating_history(player_id: int, _: CurrentUser, db: Db) -> dict:
-    """Очки и номер в таблице после каждого боя игрока, по порядку подтверждения — для графиков в профиле."""
+    """Очки и номер в таблице после каждого боя игрока, по дате боя — для графиков в профиле."""
     if db.get(User, player_id) is None:
         raise not_found("Игрок не найден")
     opponent = aliased(User)
@@ -97,7 +97,7 @@ def rating_history(player_id: int, _: CurrentUser, db: Db) -> dict:
             opponent.id == case((Fight.player1_id == RatingChange.player_id, Fight.player2_id), else_=Fight.player1_id),
         )
         .where(RatingChange.player_id == player_id, Fight.status == FightStatus.CONFIRMED)
-        .order_by(Fight.confirmed_at, Fight.id)
+        .order_by(Fight.fought_at, Fight.id)
     ).all()
     points = [
         {

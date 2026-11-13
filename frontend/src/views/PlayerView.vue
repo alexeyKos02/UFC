@@ -31,7 +31,7 @@ const chartHistory = computed(() => {
   const all = ratingHistory.data.value?.points ?? []
   if (chartPeriod.value === 'all') return all
   const since = Date.now() - MONTH_MS
-  return all.filter((item) => new Date(item.confirmed_at).getTime() >= since)
+  return all.filter((item) => new Date(item.fought_at).getTime() >= since)
 })
 
 type ResultFilter = 'all' | 'wins' | 'losses'

@@ -225,6 +225,10 @@ def fight_detail(fight: Fight, viewer: User) -> dict:
         "adjustment": _adjustment_out(fight.adjustment),
         "is_title_defense": fight.title_fight.is_defense if fight.title_fight else None,
         "resolution": resolution_out(fight),
+        # Очки этого боя пересчитаны, потому что позже подтвердили более ранний по дате бой.
+        "recalculated": {"at": fight.points_recalculated_at, "because_fight_id": fight.recalculated_by_fight_id}
+        if fight.points_recalculated_at
+        else None,
     }
 
 

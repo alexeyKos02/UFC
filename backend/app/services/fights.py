@@ -8,7 +8,7 @@ from app.db import utcnow
 from app.errors import bad_request, conflict, forbidden, not_found
 from app.models import Fight, FightConfirmation, FightKind, FightStatus, User, UserStatus
 from app.schemas import FightCorrectIn, FightCreateIn
-from app.services import rating, title_fights, tournaments
+from app.services import rating, recalc, title_fights, tournaments
 from app.services.fight_records import (
     add_version,
     apply_version_fields,
@@ -85,28 +85,20 @@ def confirm(db: Session, actor: User, fight_id: int, version_no: int) -> Fight:
 
 
 def _finalize(db: Session, fight: Fight) -> None:
-    # Очки по Elo дают все бои, турнирные тоже. Победителю турнира сверху идёт приз турнира.
+    """Засчитывает бой. Очки считаются пересчётом истории по дате боя с места этого боя:
+    если он сыгран раньше уже подтверждённых, следующие бои получат новые начисления."""
     now = utcnow()
-    players = db.scalars(
-        select(User)
-        .where(User.id.in_([fight.player1_id, fight.player2_id]))
-        .order_by(User.id)
-        .with_for_update(key_share=True)
-        .execution_options(populate_existing=True)
-    ).all()
-    by_id = {player.id: player for player in players}
-    # Номер в таблице «после боя» берётся, когда учтено всё: очки, сам бой и смена чемпиона или приз турнира.
-    places_before = rating.table_places(db)
-    rating.apply_fight_rating(db, fight, by_id[fight.winner_id], by_id[fight.loser_id], now)
     fight.status = FightStatus.CONFIRMED
     fight.confirmed_at = now
     db.flush()
+    # Смена чемпиона и победитель турнира нужны пересчёту, поэтому идут до него.
     if fight.kind == FightKind.TOURNAMENT:
         tournaments.on_fight_confirmed(db, fight)
     elif fight.kind == FightKind.TITLE:
         title_fights.on_fight_confirmed(db, fight)
     db.flush()
-    rating.record_table_places(db, fight, places_before)
+    recalc.recalculate(db.connection(), (fight.fought_at, fight.id), trigger_fight_id=fight.id, now=now)
+    db.expire_all()
 
 
 def dispute(db: Session, actor: User, fight_id: int, version_no: int, reason: str) -> Fight:

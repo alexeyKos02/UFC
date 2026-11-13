@@ -1,4 +1,3 @@
-import itertools
 import os
 import tempfile
 import uuid
@@ -97,11 +96,25 @@ class Api:
         return self.get(f"/players/{self.id}").json()
 
 
+# Тестовые бои датированы 2026 годом, а пересчёт очков ставит игрока в таблицу с даты регистрации.
+# Поэтому тестовые игроки «зарегистрированы» заранее, до всех тестовых боёв.
+REGISTERED_AT = datetime(2024, 1, 1, tzinfo=UTC)
+
+
+def backdate_registration(user_id: int) -> None:
+    from app.models import User
+
+    with SessionLocal() as db:
+        db.query(User).filter(User.id == user_id).update({User.created_at: REGISTERED_AT})
+        db.commit()
+
+
 def register(login: str) -> Api:
     api = Api(login)
     response = api.post("/auth/register", {"login": login, "password": PASSWORD})
     assert response.status_code == 201, response.text
     api.user = response.json()
+    backdate_registration(api.id)
     return api
 
 
@@ -116,6 +129,7 @@ def privileged(login: str, role: UserRole) -> Api:
     response = api.post("/auth/login", {"login": login, "password": PASSWORD})
     assert response.status_code == 200, response.text
     api.user = response.json()
+    backdate_registration(api.id)
     return api
 
 
@@ -144,13 +158,16 @@ def iso(moment: datetime | None = None) -> str:
     return (moment or FIGHT_TIME).isoformat()
 
 
-# Бои задним числом записывать нельзя, поэтому бой без явной даты получает следующую по порядку:
-# позже FIGHT_TIME и любых сдвигов на часы и дни от него, но всё равно в прошлом.
-_default_clock = itertools.count()
+# Очки считаются по дате боя, а спецместа, выдача пояса и прочие события — по реальному времени.
+# Поэтому бой без явной даты идёт «сейчас»: после всех событий, случившихся в тесте до него,
+# и строго позже предыдущего такого боя.
+_last_default = [datetime(2000, 1, 1, tzinfo=UTC)]
 
 
 def next_fight_time() -> datetime:
-    return FIGHT_TIME + timedelta(days=200, minutes=next(_default_clock))
+    moment = max(datetime.now(UTC), _last_default[0] + timedelta(milliseconds=1))
+    _last_default[0] = moment
+    return moment
 
 
 def result_body(winner_id: int, moment: datetime | None = None, **extra) -> dict:

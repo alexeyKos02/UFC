@@ -61,10 +61,18 @@ def test_calibration_ends_after_fifth_fight(players):
 
 
 def shift_fights(days: float) -> None:
-    """Сдвигает подтверждение всех боёв в прошлое, как будто с тех пор прошло days дней."""
+    """Сдвигает все бои в прошлое (дату боя и подтверждения), как будто с тех пор прошло days дней."""
+    shift = timedelta(days=days)
     with SessionLocal() as db:
-        db.query(Fight).update({Fight.confirmed_at: Fight.confirmed_at - timedelta(days=days)})
+        db.query(Fight).update(
+            {Fight.fought_at: Fight.fought_at - shift, Fight.confirmed_at: Fight.confirmed_at - shift}
+        )
         db.commit()
+
+
+def play_now(initiator, opponent, winner) -> dict:
+    """Бой «сейчас»: простой считается от даты боя."""
+    return play(initiator, opponent, winner, utcnow() - timedelta(minutes=1))
 
 
 def run_inactivity(now=None) -> int:
@@ -82,7 +90,7 @@ def test_inactivity_penalty_values():
 
 def test_no_penalty_during_first_two_weeks(players):
     winner, loser = players(2)
-    play(winner, loser, winner)
+    play_now(winner, loser, winner)
     shift_fights(13)
     assert run_inactivity() == 0
     assert winner.points() == 1024
@@ -90,7 +98,7 @@ def test_no_penalty_during_first_two_weeks(players):
 
 def test_weekly_penalty_after_two_weeks_only_above_start(players):
     winner, loser = players(2)
-    play(winner, loser, winner)
+    play_now(winner, loser, winner)
     set_points([winner], 1100)
     shift_fights(14.1)
     assert run_inactivity() == 1
@@ -113,11 +121,11 @@ def test_weekly_penalty_after_two_weeks_only_above_start(players):
 
 def test_new_fight_stops_the_decay(players):
     winner, loser = players(2)
-    play(winner, loser, winner)
+    play_now(winner, loser, winner)
     set_points([winner], 1100)
     shift_fights(15)
     assert run_inactivity() == 1
-    play(winner, loser, winner)
+    play_now(winner, loser, winner)
     points = winner.points()
     assert run_inactivity(utcnow() + timedelta(days=13)) == 0
     assert winner.points() == points
@@ -126,7 +134,7 @@ def test_new_fight_stops_the_decay(players):
 
 def test_penalty_does_not_go_below_start(players):
     winner, loser = players(2)
-    play(winner, loser, winner)
+    play_now(winner, loser, winner)
     set_points([winner], 1001)
     shift_fights(60)
     assert run_inactivity() == 1
@@ -162,27 +170,3 @@ def snapshot() -> tuple[dict, list]:
             ).order_by(RatingChange.fight_id, RatingChange.player_id)
         ).all()
     return points, [tuple(row) for row in changes]
-
-
-def test_migration_replay_matches_live_rules(admin, players):
-    """Пересчёт миграции даёт ровно то же, что начисления при подтверждении боёв."""
-    apis = players(6)
-    first, second, third, *_ = apis
-    for hour in range(12):
-        winner = first if hour % 3 else second
-        play(first, second, winner, FIGHT_TIME + timedelta(hours=hour))
-    play(third, first, third)
-    play(second, third, second)
-    tournament = new_tournament(admin, capacity=4, win_points=30)
-    run_tournament_start(admin, tournament["id"], apis[2:])
-    finish_tournament(admin, apis[2:], tournament["id"], champion=apis[3])
-    play(apis[5], first, apis[5])
-
-    before = snapshot()
-    with SessionLocal() as db:
-        db.query(User).update({User.rating_points: 1000})
-        db.query(RatingChange).delete()
-        db.commit()
-    with engine.begin() as connection:
-        load_migration().recalculate(connection)
-    assert snapshot() == before

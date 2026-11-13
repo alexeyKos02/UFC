@@ -221,14 +221,14 @@ const markers = computed(() =>
 
 const showMarkers = computed(() => markers.value.length <= MAX_MARKERS)
 
-/** Подписи дат: первый и последний бой в окне, по дате подтверждения — в этом порядке идут точки. */
+/** Подписи дат: первый и последний бой в окне, по дате боя — в этом порядке идут точки. */
 const dateLabels = computed(() => {
   const shown = markers.value
   if (!shown.length) return []
   const first = shown[0]
   const last = shown[shown.length - 1]
-  const labels = [{ index: first.index, text: formatShortDate(first.point.item!.confirmed_at), anchor: 'start' }]
-  if (last.index !== first.index) labels.push({ index: last.index, text: formatShortDate(last.point.item!.confirmed_at), anchor: 'end' })
+  const labels = [{ index: first.index, text: formatShortDate(first.point.item!.fought_at), anchor: 'start' }]
+  if (last.index !== first.index) labels.push({ index: last.index, text: formatShortDate(last.point.item!.fought_at), anchor: 'end' })
   return labels
 })
 

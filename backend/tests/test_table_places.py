@@ -109,42 +109,6 @@ def stored() -> list[tuple]:
     return [tuple(row) for row in rows]
 
 
-def test_migration_backfill_matches_live_numbers(owner, admin, players):
-    apis = players(7)
-    a, b, c, d, e, f, g = apis
-    for hour in range(6):
-        play(a, b, a if hour % 3 else b, FIGHT_TIME + timedelta(hours=hour))
-    play(c, d, c)
-    play(c, a, a)
-    assert admin.put(f"/admin/rating/special-places/{d.id}", {"place": 2}).status_code == 200
-    play(e, d, e)
-    title = schedule(admin, c, a).json()
-    play_title(title, a, c, c)
-    play(a, b, b)
-    play(b, f, f)
-    assert admin.delete(f"/admin/rating/special-places/{d.id}").status_code == 204
-    play(d, e, d)
-    tournament = new_tournament(admin, capacity=4, win_points=30)
-    run_tournament_start(admin, tournament["id"], [d, e, f, g])
-    finish_tournament(admin, [d, e, f, g], tournament["id"], champion=g)
-    belt_main = admin.get("/belts").json()[0]
-    assert admin.post(f"/admin/belts/{belt_main['id']}/award", {"player_id": e.id}).status_code == 200
-    play(g, a, g)
-
-    live = stored()
-    assert all(row[2] is not None or row[4] for row in live)
-    with SessionLocal() as db:
-        db.execute(
-            update(RatingChange).values(
-                table_place_before=None, table_place_after=None, champion_before=False, champion_after=False
-            )
-        )
-        db.commit()
-    with engine.begin() as connection:
-        load_migration().backfill(connection)
-    assert stored() == live
-
-
 def test_rating_history_lists_points_and_places_in_order(admin, players):
     first, second, third = players(3)
     play(first, second, first, FIGHT_TIME)

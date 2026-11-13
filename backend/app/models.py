@@ -358,6 +358,9 @@ class Fight(Base):
     resolved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     resolution_reason: Mapped[str | None] = mapped_column(Text)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Очки боя пересчитаны после того, как подтвердили более ранний по дате бой (app/services/recalc.py).
+    points_recalculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    recalculated_by_fight_id: Mapped[int | None] = mapped_column(ForeignKey("fights.id"))
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
 

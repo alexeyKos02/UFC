@@ -22,7 +22,6 @@ from app.models import (
     Fight,
     FightMethod,
     FightStatus,
-    RatingChange,
     RatingDecay,
     SpecialPlace,
     User,
@@ -109,66 +108,6 @@ def is_upset(winner_place: int, loser_place: int) -> bool:
     return winner_place - loser_place >= UPSET_GAP
 
 
-def _rated_fights(db: Session, player_id: int) -> int:
-    return db.scalar(select(func.count()).select_from(RatingChange).where(RatingChange.player_id == player_id))
-
-
-def _discount_available(db: Session, loser_id: int, winner_id: int, now: datetime) -> bool:
-    used = db.scalar(
-        select(func.count())
-        .select_from(RatingChange)
-        .join(Fight, Fight.id == RatingChange.fight_id)
-        .where(
-            RatingChange.player_id == loser_id,
-            RatingChange.loss_discount > 0,
-            Fight.winner_id == winner_id,
-            Fight.confirmed_at > now - LOSS_DISCOUNT_WINDOW,
-        )
-    )
-    return used < LOSS_DISCOUNTS_PER_OPPONENT
-
-
-def apply_fight_rating(db: Session, fight: Fight, winner: User, loser: User, now: datetime) -> None:
-    places = points_places(db)
-    winner_place, loser_place = places[winner.id], places[loser.id]
-    result = fight_points(
-        winner.rating_points,
-        loser.rating_points,
-        k_factor(_rated_fights(db, winner.id)),
-        k_factor(_rated_fights(db, loser.id)),
-        _discount_available(db, loser.id, winner.id, now),
-    )
-    winner_before, loser_before = winner.rating_points, loser.rating_points
-    winner.rating_points += result.gain
-    loser.rating_points -= result.loss
-    db.flush()
-    places_after = points_places(db)
-    db.add_all(
-        [
-            RatingChange(
-                fight_id=fight.id,
-                player_id=winner.id,
-                place_before=winner_place,
-                points_before=winner_before,
-                delta=result.gain,
-                points_after=winner.rating_points,
-                place_after=places_after[winner.id],
-            ),
-            RatingChange(
-                fight_id=fight.id,
-                player_id=loser.id,
-                place_before=loser_place,
-                points_before=loser_before,
-                delta=-result.loss,
-                loss_discount=result.loss_discount,
-                points_after=loser.rating_points,
-                place_after=places_after[loser.id],
-            ),
-        ]
-    )
-    db.flush()
-
-
 def inactivity_penalty(points: int) -> int:
     """Сколько очков снимается за неделю простоя. Ниже стартовых очков не опускает."""
     excess = points - START_POINTS
@@ -181,7 +120,7 @@ def _last_fight_times(db: Session) -> dict[int, datetime]:
     last: dict[int, datetime] = {}
     for column in (Fight.winner_id, Fight.loser_id):
         rows = db.execute(
-            select(column, func.max(Fight.confirmed_at)).where(Fight.status == FightStatus.CONFIRMED).group_by(column)
+            select(column, func.max(Fight.fought_at)).where(Fight.status == FightStatus.CONFIRMED).group_by(column)
         ).all()
         for player_id, moment in rows:
             if player_id not in last or moment > last[player_id]:
@@ -344,23 +283,6 @@ def rating_table(db: Session) -> list[RatingRow]:
 
     rows.sort(key=lambda row: (not row.is_champion, row.display_place or 0))
     return rows
-
-
-TablePlace = tuple[int | None, bool]
-
-
-def table_places(db: Session) -> dict[int, TablePlace]:
-    """Номер каждого активного игрока в таблице и признак чемпиона (у чемпиона номера нет)."""
-    return {row.user.id: (row.display_place, row.is_champion) for row in rating_table(db)}
-
-
-def record_table_places(db: Session, fight: Fight, before: dict[int, TablePlace]) -> None:
-    """Запоминает в начислениях боя номера в таблице до боя и после всех его последствий."""
-    after = table_places(db)
-    for change in db.scalars(select(RatingChange).where(RatingChange.fight_id == fight.id)):
-        change.table_place_before, change.champion_before = before.get(change.player_id, (None, False))
-        change.table_place_after, change.champion_after = after.get(change.player_id, (None, False))
-    db.flush()
 
 
 def rating_row_for(db: Session, user: User) -> RatingRow | None:
