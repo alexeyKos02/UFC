@@ -1892,6 +1892,13 @@ th.num {
   transform: translate(-50%, 12px);
 }
 
+/* Длинный ник соперника не вылезает из подсказки: строка обрезается многоточием. */
+.chart-tip-rival {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chart-controls {
   display: flex;
   flex-wrap: wrap;

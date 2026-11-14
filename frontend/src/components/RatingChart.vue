@@ -25,6 +25,8 @@ const MIN_SPAN = 4
 const ZOOM_STEP = 2
 // Сдвиг пальцем меньше этого считается касанием, а не перетаскиванием.
 const DRAG_THRESHOLD = 6
+// Половина наибольшей ширины подсказки (max-width 200px в styles.css) с небольшим запасом.
+const TIP_HALF = 104
 
 const box = ref<HTMLElement | null>(null)
 const width = ref(600)
@@ -330,7 +332,8 @@ const tooltip = computed(() => {
   if (active.value === null) return null
   const point = points.value[active.value]
   if (!point || !inView(active.value)) return null
-  const left = Math.min(Math.max(x(active.value), 90), width.value - 90)
+  // Подсказка шириной до 200px стоит по центру над точкой, но не вылезает за края графика.
+  const left = Math.min(Math.max(x(active.value), TIP_HALF), Math.max(width.value - TIP_HALF, TIP_HALF))
   const top = y(point.value)
   // У верхнего края подсказка уходит под точку, чтобы не вылезать за график.
   return { point, left, top, below: top < 80 }
@@ -434,7 +437,7 @@ const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
       <div v-if="tooltip" class="chart-tip" :class="{ below: tooltip.below }" :style="{ left: `${tooltip.left}px`, top: `${tooltip.top}px` }">
         <template v-if="tooltip.point.item">
           <span class="small muted">{{ formatBoutDate(tooltip.point.item.fought_at) }}</span>
-          <span>
+          <span class="chart-tip-rival">
             <b :class="tooltip.point.item.won ? 'tone-plus' : 'tone-minus'">{{ tooltip.point.item.won ? 'Победа' : 'Поражение' }}</b>
             {{ tooltip.point.item.won ? 'над' : 'от' }} {{ tooltip.point.item.opponent.nickname }}
           </span>

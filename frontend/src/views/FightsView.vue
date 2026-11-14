@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
+import CollapsibleSection from '../components/CollapsibleSection.vue'
 import FightCard from '../components/FightCard.vue'
 import SkeletonBlock from '../components/SkeletonBlock.vue'
 import UpcomingBoutCard from '../components/UpcomingBoutCard.vue'
@@ -43,12 +44,16 @@ void load(true)
       <RouterLink class="btn primary" to="/fights/new" data-tour="new-fight">Записать бой</RouterLink>
     </div>
 
-    <section v-if="upcoming.data.value?.length" class="section">
-      <h2>Предстоящие бои</h2>
+    <CollapsibleSection
+      v-if="upcoming.data.value?.length"
+      title="Предстоящие бои"
+      storage-key="fights:upcoming"
+      :count="upcoming.data.value.length"
+    >
       <div class="stack" style="gap: 16px">
         <UpcomingBoutCard v-for="bout in upcoming.data.value" :key="`${bout.kind}-${bout.id}`" :bout="bout" @changed="upcoming.reload" />
       </div>
-    </section>
+    </CollapsibleSection>
 
     <section class="section">
       <div class="section-head">
