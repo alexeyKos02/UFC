@@ -2,6 +2,7 @@
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import { currentUser } from '../auth'
+import CollapsibleSection from '../components/CollapsibleSection.vue'
 import FightCard from '../components/FightCard.vue'
 import PlayerChip from '../components/PlayerChip.vue'
 import StateBlock from '../components/StateBlock.vue'
@@ -24,25 +25,33 @@ const { data, error, loading, reload } = useLoad(() => api.get<MyFights>('/fight
     </div>
     <StateBlock :loading="loading" :error="error" skeleton="list">
       <template v-if="data">
-        <section class="section" data-tour="to-confirm">
-          <h2>На подтверждение</h2>
+        <CollapsibleSection
+          title="На подтверждение"
+          storage-key="my-fights:to-confirm"
+          :count="data.to_confirm.length"
+          attention
+          data-tour="to-confirm"
+        >
           <p v-if="data.to_confirm.length > 1" class="small muted">Сверху — более ранние бои.</p>
           <div v-if="data.to_confirm.length" class="stack" style="gap: 16px">
             <FightCard v-for="fight in data.to_confirm" :key="fight.id" :fight="fight" actions @changed="reload" />
           </div>
           <p v-else class="empty">Нет результатов, которые ждут вашего решения.</p>
-        </section>
+        </CollapsibleSection>
 
-        <section class="section">
-          <h2>Предстоящие бои</h2>
+        <CollapsibleSection title="Предстоящие бои" storage-key="my-fights:upcoming" :count="data.upcoming.length">
           <div v-if="data.upcoming.length" class="stack" style="gap: 16px">
             <UpcomingBoutCard v-for="bout in data.upcoming" :key="`${bout.kind}-${bout.id}`" :bout="bout" @changed="reload" />
           </div>
           <p v-else class="empty">Предстоящих боёв нет.</p>
-        </section>
+        </CollapsibleSection>
 
-        <section v-if="data.matches.length" class="section">
-          <h2>Турниры: соперник ещё не определён</h2>
+        <CollapsibleSection
+          v-if="data.matches.length"
+          title="Турниры: соперник ещё не определён"
+          storage-key="my-fights:matches"
+          :count="data.matches.length"
+        >
           <div class="grid">
             <article v-for="match in data.matches" :key="match.id" class="card stack">
               <div class="row between">
@@ -61,23 +70,26 @@ const { data, error, loading, reload } = useLoad(() => api.get<MyFights>('/fight
               </div>
             </article>
           </div>
-        </section>
+        </CollapsibleSection>
 
-        <section class="section">
-          <h2>Оспоренные</h2>
+        <CollapsibleSection title="Оспоренные" storage-key="my-fights:disputed" :count="data.disputed.length">
           <div v-if="data.disputed.length" class="stack" style="gap: 16px">
             <FightCard v-for="fight in data.disputed" :key="fight.id" :fight="fight" actions @changed="reload" />
           </div>
           <p v-else class="empty">Оспоренных записей нет.</p>
-        </section>
+        </CollapsibleSection>
 
-        <section class="section" data-tour="waiting">
-          <h2>Ждут подтверждения соперника</h2>
+        <CollapsibleSection
+          title="Ждут подтверждения соперника"
+          storage-key="my-fights:waiting"
+          :count="data.waiting.length"
+          data-tour="waiting"
+        >
           <div v-if="data.waiting.length" class="stack" style="gap: 16px">
             <FightCard v-for="fight in data.waiting" :key="fight.id" :fight="fight" />
           </div>
           <p v-else class="empty">Отправленных записей нет.</p>
-        </section>
+        </CollapsibleSection>
       </template>
     </StateBlock>
   </main>

@@ -18,6 +18,18 @@ const { busy, run } = useAction()
 
 const isRegistration = computed(() => data.value?.status === 'registration')
 
+/** Призы в очки лиги за места; бои турнира сами очков лиги не дают. */
+const prizeLine = computed(() => {
+  const tournament = data.value
+  if (!tournament) return ''
+  const parts = [
+    tournament.win_points ? `1-е +${tournament.win_points}` : '',
+    tournament.second_points ? `2-е +${tournament.second_points}` : '',
+    tournament.third_points ? `3-е +${tournament.third_points}${tournament.has_third_place ? '' : ' каждому полуфиналисту'}` : '',
+  ].filter(Boolean)
+  return parts.length ? `Призы в очки лиги: ${parts.join(' · ')}` : ''
+})
+
 async function join(): Promise<void> {
   await run(() => api.post(`/tournaments/${props.id}/join`), 'Вы в турнире')
   await reload()
@@ -49,7 +61,7 @@ function slots(match: MatchOut): (PlayerBrief | null)[] {
               <StatusBadge :tournament="data.status" />
               <RouterLink class="link small" :to="`/belts/${data.belt.id}`">За пояс «{{ data.belt.name }}»</RouterLink>
               <span class="small muted">Мест занято: {{ seatsLine(data) }}</span>
-              <span v-if="data.win_points" class="small muted">Очки за победу: +{{ data.win_points }}</span>
+              <span v-if="prizeLine" class="small muted">{{ prizeLine }}</span>
             </div>
           </div>
         </div>
@@ -79,7 +91,8 @@ function slots(match: MatchOut): (PlayerBrief | null)[] {
             <section v-for="round in data.rounds" :key="round.round" class="bracket-round">
               <h3>{{ round.name }}</h3>
               <div class="bracket-matches">
-                <article v-for="match in round.matches" :key="match.id" class="match" :class="{ mine: isMine(match) && match.state !== 'completed' && match.state !== 'bye' }">
+                <article v-for="match in round.matches" :key="match.id" class="match" :class="{ mine: isMine(match) && match.state !== 'completed' && match.state !== 'bye', 'third-place': match.is_third_place }">
+                  <p v-if="match.is_third_place" class="match-label">За 3-е место</p>
                   <div v-for="(slot, index) in slots(match)" :key="index" class="match-player">
                     <PlayerChip v-if="slot" :player="slot" :size="24" :class="{ 'is-loser': match.winner_id && match.winner_id !== slot.id }" />
                     <span v-else class="tbd small">{{ match.is_bye ? 'Без соперника' : 'Определится позже' }}</span>

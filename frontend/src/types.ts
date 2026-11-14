@@ -1,6 +1,6 @@
 export type Role = 'player' | 'admin' | 'owner'
 export type RatingTier = 'top' | 'middle' | 'bottom' | 'calibration'
-export type FightStatus = 'pending' | 'disputed' | 'confirmed' | 'cancelled'
+export type FightStatus = 'pending' | 'disputed' | 'confirmed' | 'cancelled' | 'deleted'
 export type FightKind = 'regular' | 'tournament' | 'title'
 export type FightMethod = 'ko_tko' | 'submission' | 'decision'
 export type TournamentStatus = 'draft' | 'registration' | 'in_progress' | 'finished' | 'cancelled'
@@ -115,6 +115,21 @@ export interface FightBrief {
   can_dispute: boolean
   can_correct: boolean
   dispute_reason: string | null
+  /** Подтверждённый бой удалён админом: очки, пояс и сетка откатились. */
+  deletion: FightDeletion | null
+}
+
+export interface FightDeletion {
+  by: PlayerBrief | null
+  reason: string | null
+  at: string
+}
+
+/** Найденные в админке бои: страница результатов и сколько всего подходит. */
+export interface FightSearchPage {
+  items: FightBrief[]
+  total: number
+  page_size: number
 }
 
 /** Решение админа по зависшему бою. */
@@ -195,7 +210,11 @@ export interface TournamentCard {
   description: string
   status: TournamentStatus
   capacity: number
+  /** Призы в очки лиги за 1-е, 2-е и 3-е место. */
   win_points: number
+  second_points: number
+  third_points: number
+  has_third_place: boolean
   seats_taken: number
   belt: BeltBrief
   winner: PlayerBrief | null
@@ -213,6 +232,7 @@ export interface MatchOut {
   player2: PlayerBrief | null
   winner_id: number | null
   is_bye: boolean
+  is_third_place: boolean
   state: MatchState
   fight_id: number | null
   can_submit: boolean
@@ -302,6 +322,18 @@ export interface RivalStat {
   count: number
 }
 
+export type StatScope = 'all' | 'league' | 'tournament'
+
+export interface PlayerStats {
+  fights: number
+  wins: number
+  losses: number
+  win_rate: number | null
+  best_streak: number
+  nemeses: RivalStat[]
+  victims: RivalStat[]
+}
+
 export interface PlayerProfile {
   player: PlayerBrief & { full_body_url: string | null; created_at: string }
   rating: {
@@ -315,15 +347,8 @@ export interface PlayerProfile {
     /** Неделя и больше без боёв: сколько дней и сколько очков уже снято за этот простой. */
     inactivity: { days_without_fights: number; lost_points: number; decay_starts_at: string } | null
   }
-  stats: {
-    fights: number
-    wins: number
-    losses: number
-    win_rate: number | null
-    best_streak: number
-    nemeses: RivalStat[]
-    victims: RivalStat[]
-  }
+  /** Общая статистика и отдельно бои лиги (обычные и титульные) и турниров. */
+  stats: Record<StatScope, PlayerStats>
   belts: { active: ProfileBelt[]; past: ProfileBelt[] }
   is_me: boolean
   /** Очные встречи зрителя с этим игроком; на своей странице null. */

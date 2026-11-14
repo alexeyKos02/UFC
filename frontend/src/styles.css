@@ -1365,6 +1365,14 @@ th.num {
   min-width: 4px;
   height: 10px;
   border-radius: 4px;
+  /* Доли полосы перетекают при смене значений (переключатель статистики в профиле). */
+  transition:
+    flex-grow 0.55s cubic-bezier(0.33, 1, 0.68, 1),
+    min-width 0.55s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.record-segment.zero {
+  min-width: 0;
 }
 
 .record-wins {
@@ -2416,5 +2424,320 @@ th.num {
     background: var(--bg);
     font-size: 16px;
     color: var(--text);
+  }
+}
+
+/* Заголовок сворачиваемого раздела (CollapsibleSection): кнопка во всю ширину строки. */
+.collapsible-head button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collapsible-head button:focus-visible {
+  outline: 2px solid var(--corner-blue);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.collapsible-chevron {
+  flex: none;
+  font-size: 16px;
+  color: var(--text-3);
+  transition: transform 0.2s;
+}
+
+.collapsible-chevron.closed {
+  transform: rotate(-90deg);
+}
+
+.section-count {
+  flex: none;
+  min-width: 24px;
+  padding: 0 7px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+}
+
+.section-count.attention {
+  background: var(--red-strong);
+  color: #fff;
+}
+
+/* Кнопки поиска боёв в админке — отдельной строкой под полями. */
+.fight-search-actions {
+  grid-column: 1 / -1;
+}
+
+/* Призы турнира в админке: отдельная группа полей с подписью. */
+.prize-fields {
+  margin: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 0;
+}
+
+.prize-fields legend {
+  padding: 0 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.prize-fields p {
+  margin: 0;
+}
+
+/* Галочка с подписью в одну строку (переносится на узком экране). */
+.check {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.check input {
+  align-self: center;
+  width: 18px;
+  height: 18px;
+}
+
+input:disabled {
+  opacity: 0.55;
+}
+
+/* Матч за 3-е место в колонке финала: отделён от финала и подписан. */
+.match.third-place {
+  margin-top: 18px;
+  border-style: dashed;
+}
+
+.match-label {
+  margin: 0;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* Переключатель-плашка (SegmentedToggle): подложка выбранной кнопки переезжает «желе». */
+.segmented {
+  position: relative;
+  display: inline-flex;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  isolation: isolate;
+}
+
+.segmented-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  z-index: -1;
+  border-radius: 9px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transform-origin: center;
+}
+
+/* Подложка разгоняется к новой кнопке и останавливается ровно на ней, без перелёта.
+   Сдвиг — свойство translate, а не transform: иначе сжатие (scale) масштабировало бы и сдвиг,
+   и подложку при ударе вправо уводило бы влево. */
+.segmented-thumb.ready {
+  transition:
+    translate 0.26s cubic-bezier(0.5, 0, 0.9, 0.6),
+    width 0.26s cubic-bezier(0.5, 0, 0.9, 0.6);
+}
+
+/* Удар о «стенку»: сжатие от стороны удара, затем затухающие колебания. Масштаб не больше 1
+   по ширине, поэтому подложка не выходит за свою кнопку. */
+.segmented-thumb.hit-right {
+  transform-origin: right center;
+}
+
+.segmented-thumb.hit-left {
+  transform-origin: left center;
+}
+
+.segmented-thumb.jelly {
+  animation: segmented-jelly 0.55s ease-out both;
+}
+
+@keyframes segmented-jelly {
+  0% { scale: 1 1; }
+  18% { scale: 0.82 1.07; }
+  40% { scale: 0.97 0.98; }
+  60% { scale: 0.92 1.03; }
+  80% { scale: 0.99 1; }
+  100% { scale: 1 1; }
+}
+
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-2);
+  font: 600 15px/1.2 var(--body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.segmented button[aria-pressed='true'] {
+  color: var(--text);
+}
+
+.segmented button:focus-visible {
+  outline: 2px solid var(--corner-blue);
+  outline-offset: -2px;
+}
+
+.segmented-count {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* На телефоне плашка во всю ширину, кнопки делят её поровну. */
+@media (max-width: 420px) {
+  .segmented {
+    display: flex;
+    align-self: stretch;
+  }
+
+  .segmented button {
+    flex: 1 1 0;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+    padding: 6px 4px;
+    font-size: 14px;
+  }
+
+  .segmented-count {
+    min-width: 18px;
+    padding: 0 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segmented-thumb.ready {
+    transition: none;
+  }
+
+  .segmented-thumb.jelly {
+    animation: none;
+  }
+}
+
+/* Смена списков «Хозяин / Владеет» при переключении статистики: старый уходит вверх, новый приходит снизу. */
+.stat-swap-enter-active,
+.stat-swap-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.stat-swap-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.stat-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .record-segment,
+  .stat-swap-enter-active,
+  .stat-swap-leave-active {
+    transition: none;
+  }
+}
+
+/* AnimatedNumber: старое и новое число в одной клетке сетки, одно уезжает, другое въезжает.
+   Шрифт и цвет — как у окружения: правила вроде «.tile span» (подписи плиток) не должны его менять. */
+span.anum,
+span.anum > span.anum-value {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+span.anum {
+  display: inline-grid;
+  vertical-align: bottom;
+  overflow: hidden;
+}
+
+span.anum > span.anum-value {
+  grid-area: 1 / 1;
+  justify-self: end;
+}
+
+.anum-up-enter-active,
+.anum-up-leave-active,
+.anum-down-enter-active,
+.anum-down-leave-active {
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s ease;
+}
+
+.anum-up-enter-from,
+.anum-down-leave-to {
+  transform: translateY(70%);
+  opacity: 0;
+}
+
+.anum-up-leave-to,
+.anum-down-enter-from {
+  transform: translateY(-70%);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anum-up-enter-active,
+  .anum-up-leave-active,
+  .anum-down-enter-active,
+  .anum-down-leave-active {
+    transition: none;
   }
 }

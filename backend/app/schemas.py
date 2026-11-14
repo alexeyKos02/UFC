@@ -65,6 +65,9 @@ class TournamentIn(BaseModel):
     description: Description = ""
     capacity: int = Field(ge=2, le=128)
     win_points: int = Field(ge=0, le=100_000)
+    second_points: int = Field(default=0, ge=0, le=100_000)
+    third_points: int = Field(default=0, ge=0, le=100_000)
+    has_third_place: bool = True
     belt_id: int
 
 

@@ -14,7 +14,7 @@ def test_fight_counts_only_after_second_confirmation(players):
     assert fight["versions"][0]["confirmed_by"][0]["id"] == first.id
 
     assert first.points() == 1000
-    assert first.profile()["stats"]["fights"] == 0
+    assert first.profile()["stats"]["all"]["fights"] == 0
     assert first.get("/fights").json()["total"] == 0
     inbox = second.get("/fights/mine").json()
     assert [item["id"] for item in inbox["to_confirm"]] == [fight["id"]]
@@ -24,8 +24,8 @@ def test_fight_counts_only_after_second_confirmation(players):
     assert first.points() == 1024
     assert second.points() == 982
     assert first.get("/fights").json()["total"] == 1
-    assert first.profile()["stats"]["wins"] == 1
-    assert second.profile()["stats"]["losses"] == 1
+    assert first.profile()["stats"]["all"]["wins"] == 1
+    assert second.profile()["stats"]["all"]["losses"] == 1
 
 
 def test_replayed_create_returns_same_fight(players):
@@ -56,7 +56,7 @@ def test_repeated_confirmation_counts_once(players):
     assert confirm(first, fight).status_code == 200
     assert first.points() == 1024
     assert second.points() == 982
-    assert first.profile()["stats"]["fights"] == 1
+    assert first.profile()["stats"]["all"]["fights"] == 1
 
 
 def test_parallel_confirmations_give_one_result(players):
@@ -167,7 +167,7 @@ def test_statistics_streak_and_rivals(players):
     play(me, rival_a, rival_a, moments[5])
     play(me, rival_b, rival_b, moments[6])
     play(me, rival_b, rival_b, moments[7])
-    stats = me.profile()["stats"]
+    stats = me.profile()["stats"]["all"]
     assert stats["fights"] == 8
     assert stats["wins"] == 4
     assert stats["losses"] == 4
@@ -187,11 +187,11 @@ def test_streak_uses_fight_time_not_insertion_order(players):
     first = create_fight(me, rival, me, FIGHT_TIME).json()
     for fight in (first, middle, last):
         assert confirm(rival, fight).status_code == 200
-    assert me.profile()["stats"]["best_streak"] == 2
+    assert me.profile()["stats"]["all"]["best_streak"] == 2
 
 
 def test_empty_statistics(players):
-    stats = players(1)[0].profile()["stats"]
+    stats = players(1)[0].profile()["stats"]["all"]
     assert stats["fights"] == 0
     assert stats["win_rate"] is None
     assert stats["nemeses"] == []

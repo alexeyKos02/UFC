@@ -3,7 +3,7 @@ from collections import Counter
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import AdjustmentStatus, Fight, FightStatus, RatingAdjustment, RatingChange, User
+from app.models import AdjustmentStatus, Fight, FightKind, FightStatus, RatingAdjustment, RatingChange, User
 
 
 def _win_rate(wins: int, total: int) -> float | None:
@@ -11,7 +11,8 @@ def _win_rate(wins: int, total: int) -> float | None:
 
 
 def league_stats(db: Session) -> dict[int, dict]:
-    confirmed = Fight.status == FightStatus.CONFIRMED
+    """Победы и поражения в лиге (обычные и титульные бои) — для таблицы и сравнения в карточке боя."""
+    confirmed = (Fight.status == FightStatus.CONFIRMED) & (Fight.kind != FightKind.TOURNAMENT)
     wins = dict(db.execute(select(Fight.winner_id, func.count()).where(confirmed).group_by(Fight.winner_id)).all())
     losses = dict(db.execute(select(Fight.loser_id, func.count()).where(confirmed).group_by(Fight.loser_id)).all())
     result: dict[int, dict] = {}
@@ -69,8 +70,25 @@ def _leaders(db: Session, counter: Counter) -> list[tuple[User, int]]:
     return [(player, top) for player in players]
 
 
-def player_stats(db: Session, user_id: int) -> dict:
+# Разделы статистики в профиле: все бои, бои лиги (обычные и титульные) и бои турниров.
+STAT_SCOPES = {
+    "all": None,
+    "league": (FightKind.REGULAR, FightKind.TITLE),
+    "tournament": (FightKind.TOURNAMENT,),
+}
+
+
+def player_stats_by_scope(db: Session, user_id: int) -> dict[str, dict]:
     fights = confirmed_fights_of(db, user_id)
+    return {
+        scope: player_stats(db, user_id, [fight for fight in fights if kinds is None or fight.kind in kinds])
+        for scope, kinds in STAT_SCOPES.items()
+    }
+
+
+def player_stats(db: Session, user_id: int, fights: list[Fight] | None = None) -> dict:
+    if fights is None:
+        fights = confirmed_fights_of(db, user_id)
     wins = losses = streak = best_streak = 0
     beaten: Counter = Counter()
     lost_to: Counter = Counter()

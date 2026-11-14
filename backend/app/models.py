@@ -53,6 +53,8 @@ class FightStatus(StrEnum):
     DISPUTED = "disputed"
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"
+    # Подтверждённый бой, который удалил админ: очки, пояс и сетка откатились.
+    DELETED = "deleted"
 
 
 class FightMethod(StrEnum):
@@ -184,6 +186,8 @@ class Tournament(Base):
     __table_args__ = (
         CheckConstraint("capacity >= 2", name="capacity_min"),
         CheckConstraint("win_points >= 0", name="win_points_non_negative"),
+        CheckConstraint("second_points >= 0", name="second_points_non_negative"),
+        CheckConstraint("third_points >= 0", name="third_points_non_negative"),
         Index(
             "uq_tournaments_active_belt",
             "belt_id",
@@ -196,7 +200,12 @@ class Tournament(Base):
     title: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     capacity: Mapped[int] = mapped_column(Integer)
+    # Призы в очки лиги за 1-е, 2-е и 3-е место; сами бои турнира очков лиги не дают.
     win_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    second_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    third_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Матч за 3-е место между проигравшими в полуфиналах; без него 3-е место делят оба.
+    has_third_place: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     belt_id: Mapped[int] = mapped_column(ForeignKey("belts.id"), index=True)
     status: Mapped[TournamentStatus] = mapped_column(
         enum_type(TournamentStatus, "tournament_status"), default=TournamentStatus.DRAFT, index=True
@@ -253,6 +262,8 @@ class TournamentMatch(Base):
     player2_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     winner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     is_bye: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Матч за 3-е место: последний круг, позиция 1 (финал — позиция 0).
+    is_third_place: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     tournament: Mapped[Tournament] = relationship(back_populates="matches")
     player1: Mapped[User | None] = relationship(foreign_keys=[player1_id])
@@ -358,6 +369,10 @@ class Fight(Base):
     resolved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     resolution_reason: Mapped[str | None] = mapped_column(Text)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Удаление подтверждённого боя админом (status deleted).
+    deleted_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    deletion_reason: Mapped[str | None] = mapped_column(Text)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Очки боя пересчитаны после того, как подтвердили более ранний по дате бой (app/services/recalc.py).
     points_recalculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     recalculated_by_fight_id: Mapped[int | None] = mapped_column(ForeignKey("fights.id"))
@@ -368,6 +383,7 @@ class Fight(Base):
     player2: Mapped[User] = relationship(foreign_keys=[player2_id])
     initiator: Mapped[User] = relationship(foreign_keys=[initiator_id])
     resolved_by: Mapped[User | None] = relationship(foreign_keys=[resolved_by_id])
+    deleted_by: Mapped[User | None] = relationship(foreign_keys=[deleted_by_id])
     winner: Mapped[User] = relationship(foreign_keys=[winner_id])
     loser: Mapped[User] = relationship(foreign_keys=[loser_id])
     versions: Mapped[list["FightVersion"]] = relationship(

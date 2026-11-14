@@ -20,6 +20,7 @@ from app.models import (
     Belt,
     BeltKind,
     Fight,
+    FightKind,
     FightMethod,
     FightStatus,
     RatingDecay,
@@ -267,8 +268,11 @@ def rating_table(db: Session) -> list[RatingRow]:
         else:
             to_number.append(player)
 
+    # Калибровка и разбор равных очков — только по боям лиги: турнирные очков лиги не дают.
     fights = db.execute(
-        select(Fight.winner_id, Fight.loser_id, Fight.method).where(Fight.status == FightStatus.CONFIRMED)
+        select(Fight.winner_id, Fight.loser_id, Fight.method).where(
+            Fight.status == FightStatus.CONFIRMED, Fight.kind != FightKind.TOURNAMENT
+        )
     ).all()
     fights_played = Counter(player_id for winner_id, loser_id, _ in fights for player_id in (winner_id, loser_id))
     free_numbers = (number for number in count(1) if number not in taken_numbers)

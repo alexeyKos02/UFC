@@ -78,3 +78,22 @@ def award_manually(db: Session, actor: User, belt_id: int, player_id: int) -> Be
     belt.current_champion_id = player.id
     db.commit()
     return belt
+
+
+def revoke(db: Session, win: BeltWin) -> None:
+    """Откатывает переход пояса (бой с этим результатом удалён): пояс возвращается прежнему чемпиону.
+
+    Только если это последний переход пояса: иначе после него пояс уже кто-то брал или защищал.
+    """
+    belt = db.scalar(
+        select(Belt).where(Belt.id == win.belt_id).with_for_update().execution_options(populate_existing=True)
+    )
+    later = db.scalar(select(BeltWin.id).where(BeltWin.belt_id == belt.id, BeltWin.id > win.id).limit(1))
+    if later is not None:
+        raise conflict(
+            f"После этого боя пояс «{belt.name}» уже переходил или защищался. "
+            "Сначала удалите более поздние бои за этот пояс"
+        )
+    belt.current_champion_id = win.previous_champion_id
+    db.delete(win)
+    db.flush()

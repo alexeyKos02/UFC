@@ -67,7 +67,10 @@ def player_profile(player_id: int, viewer: CurrentUser, db: Db) -> dict:
             "is_calibrating": row.is_calibrating if row else False,
             "inactivity": rating.inactivity_info(db, user) if row else None,
         },
-        "stats": stats_with_leaders(stats.player_stats(db, user.id)),
+        # Общая статистика и отдельно лига и турниры: в профиле переключаются кнопками.
+        "stats": {
+            scope: stats_with_leaders(values) for scope, values in stats.player_stats_by_scope(db, user.id).items()
+        },
         "belts": player_belts(db, user),
         "is_me": viewer.id == user.id,
         "head_to_head": None if viewer.id == user.id else stats.head_to_head(db, viewer.id, user.id),

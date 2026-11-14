@@ -1,5 +1,8 @@
+from datetime import datetime
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query, UploadFile, status
-from sqlalchemy import or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import aliased
 
 from app.deps import Db, OwnerUser, StaffUser, require_staff
@@ -126,6 +129,66 @@ def admin_accept_fight(fight_id: int, body: AcceptIn, viewer: StaffUser, db: Db)
 @router.post("/fights/{fight_id}/cancel")
 def admin_cancel_fight(fight_id: int, body: CancelIn, viewer: StaffUser, db: Db) -> dict:
     return fight_detail(fight_service.admin_cancel(db, viewer, fight_id, body.reason), viewer)
+
+
+# Поиск и удаление подтверждённых боёв
+
+SEARCH_STATUSES = {
+    "confirmed": (FightStatus.CONFIRMED,),
+    "deleted": (FightStatus.DELETED,),
+    "all": (FightStatus.CONFIRMED, FightStatus.DELETED),
+}
+SEARCH_PAGE = 30
+
+
+@router.get("/fights/search")
+def admin_search_fights(
+    viewer: StaffUser,
+    db: Db,
+    player: str | None = Query(default=None, max_length=32),
+    opponent: str | None = Query(default=None, max_length=32),
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    state: Literal["confirmed", "deleted", "all"] = "confirmed",
+    offset: int = Query(default=0, ge=0),
+) -> dict:
+    """Подтверждённые (и удалённые) бои по нику участников и дате боя, свежие сверху.
+
+    player и opponent — часть ника; с обоими ищутся бои именно этой пары. Границы дат — моменты
+    времени: начало и конец дня считает браузер в своём часовом поясе.
+    """
+    first, second = aliased(User), aliased(User)
+    query = (
+        select(Fight)
+        .join(first, first.id == Fight.player1_id)
+        .join(second, second.id == Fight.player2_id)
+        .where(Fight.status.in_(SEARCH_STATUSES[state]))
+    )
+    player, opponent = (player or "").strip(), (opponent or "").strip()
+    if player and opponent:
+        query = query.where(
+            or_(
+                and_(first.nickname.icontains(player, autoescape=True), second.nickname.icontains(opponent, autoescape=True)),
+                and_(first.nickname.icontains(opponent, autoescape=True), second.nickname.icontains(player, autoescape=True)),
+            )
+        )
+    elif player or opponent:
+        name = player or opponent
+        query = query.where(
+            or_(first.nickname.icontains(name, autoescape=True), second.nickname.icontains(name, autoescape=True))
+        )
+    if date_from is not None:
+        query = query.where(Fight.fought_at >= date_from)
+    if date_to is not None:
+        query = query.where(Fight.fought_at < date_to)
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    fights = db.scalars(query.order_by(Fight.fought_at.desc(), Fight.id.desc()).offset(offset).limit(SEARCH_PAGE)).all()
+    return {"items": [fight_brief(fight, viewer) for fight in fights], "total": total, "page_size": SEARCH_PAGE}
+
+
+@router.post("/fights/{fight_id}/delete")
+def admin_delete_fight(fight_id: int, body: CancelIn, viewer: StaffUser, db: Db) -> dict:
+    return fight_detail(fight_service.admin_delete(db, viewer, fight_id, body.reason), viewer)
 
 
 # Пояса

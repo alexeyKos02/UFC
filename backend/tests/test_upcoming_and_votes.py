@@ -63,7 +63,7 @@ def test_planned_fight_is_listed_and_changes_nothing(players):
     assert [row["id"] for row in upcoming(witness)] == [item["id"]]
     assert witness.get("/fights").json()["total"] == 0
     assert first.points() == 1000
-    assert first.profile()["stats"]["fights"] == 0
+    assert first.profile()["stats"]["all"]["fights"] == 0
     assert [row["id"] for row in second.get("/fights/mine").json()["upcoming"]] == [item["id"]]
     assert witness.get("/fights/mine").json()["upcoming"] == []
 

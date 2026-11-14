@@ -15,6 +15,7 @@ const TONES: Record<string, string> = {
   disputed: 'tone-red',
   confirmed: 'tone-green',
   cancelled: 'tone-grey',
+  deleted: 'tone-red',
   draft: 'tone-grey',
   registration: 'tone-blue',
   in_progress: 'tone-amber',

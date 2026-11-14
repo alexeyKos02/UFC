@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../../api'
 import Modal from '../../components/Modal.vue'
+import AdminFightSearch from './AdminFightSearch.vue'
 import StateBlock from '../../components/StateBlock.vue'
 import StatusBadge from '../../components/StatusBadge.vue'
 import { useAction, useLoad } from '../../feedback'
@@ -79,6 +80,8 @@ async function cancel(): Promise<void> {
       <p v-else class="empty">Все бои с итогом.</p>
     </StateBlock>
   </section>
+
+  <AdminFightSearch />
 
   <Modal v-if="accepting" title="Засчитать бой" @close="close">
     <form class="stack" @submit.prevent="accept">

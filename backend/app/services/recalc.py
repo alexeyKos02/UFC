@@ -110,6 +110,57 @@ def points_places(points, roster) -> dict[int, int]:
     return {player: place_of[points[player]] for player in roster}
 
 
+def tournament_prizes(connection: Connection) -> dict[int, list[tuple[int, int]]]:
+    """Призы завершённых турниров в очки лиги: бой, завершивший турнир, -> [(игрок, очки)].
+
+    1-е место — победитель финала, 2-е — проигравший в финале. 3-е — победитель матча за 3-е место,
+    а без такого матча — оба проигравших полуфиналиста. Турнир завершает последний по дате бой
+    из финала и матча за 3-е место.
+    """
+    tournaments = connection.execute(
+        text(
+            "SELECT id, rounds_count, win_points, second_points, third_points, has_third_place "
+            "FROM tournaments WHERE status = 'finished' AND winner_id IS NOT NULL"
+        )
+    ).all()
+    if not tournaments:
+        return {}
+    matches = defaultdict(list)
+    for row in connection.execute(
+        text(
+            "SELECT m.tournament_id, m.round, m.player1_id, m.player2_id, m.winner_id, m.is_bye, m.is_third_place, "
+            "f.id AS fight_id, f.fought_at FROM tournament_matches m "
+            "LEFT JOIN fights f ON f.tournament_match_id = m.id AND f.status = 'confirmed' "
+            "WHERE m.tournament_id = ANY(:ids)"
+        ),
+        {"ids": [row.id for row in tournaments]},
+    ):
+        matches[row.tournament_id].append(row)
+
+    def loser(match) -> int | None:
+        if match.is_bye or match.winner_id is None or match.player1_id is None or match.player2_id is None:
+            return None
+        return match.player2_id if match.winner_id == match.player1_id else match.player1_id
+
+    prizes: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for tournament in tournaments:
+        rows = matches[tournament.id]
+        final = next((m for m in rows if m.round == tournament.rounds_count and not m.is_third_place), None)
+        if final is None or final.fight_id is None:
+            continue
+        third_match = next((m for m in rows if m.is_third_place), None) if tournament.has_third_place else None
+        places = [(final.winner_id, tournament.win_points), (loser(final), tournament.second_points)]
+        if third_match is not None:
+            places.append((third_match.winner_id, tournament.third_points))
+        else:
+            semis = [m for m in rows if m.round == tournament.rounds_count - 1 and not m.is_third_place]
+            places += [(loser(m), tournament.third_points) for m in semis]
+        closing = [m for m in (final, third_match) if m is not None and m.fight_id is not None]
+        last = max(closing, key=lambda m: (m.fought_at, m.fight_id))
+        prizes[last.fight_id] += [(player, prize) for player, prize in places if player is not None and prize]
+    return prizes
+
+
 def recalculate(
     connection: Connection,
     from_key: tuple[datetime, int] | None = None,
@@ -142,21 +193,11 @@ def recalculate(
             )
         ).all()
     )
-    fight_prize = {
-        row.fight_id: (row.winner_id, row.win_points)
-        for row in connection.execute(
-            text(
-                "SELECT f.id AS fight_id, t.winner_id, t.win_points FROM tournaments t "
-                "JOIN tournament_matches m ON m.tournament_id = t.id AND m.round = t.rounds_count "
-                "JOIN fights f ON f.tournament_match_id = m.id "
-                "WHERE t.status = 'finished' AND t.winner_id IS NOT NULL"
-            )
-        )
-    }
+    fight_prize = tournament_prizes(connection)
 
     events = [(row.created_at, 0, row.id, "user", row) for row in users]
     for row in connection.execute(
-        text("SELECT id, winner_id, loser_id, method, fought_at FROM fights WHERE status = 'confirmed'")
+        text("SELECT id, kind, winner_id, loser_id, method, fought_at FROM fights WHERE status = 'confirmed'")
     ):
         events.append((row.fought_at, 1, row.id, "fight", row))
     for row in connection.execute(
@@ -170,7 +211,7 @@ def recalculate(
         text(
             "SELECT a.fight_id, a.winner_delta, a.updated_at, f.winner_id, f.loser_id "
             "FROM rating_adjustments a JOIN fights f ON f.id = a.fight_id "
-            "WHERE a.status = 'active' AND f.status = 'confirmed'"
+            "WHERE a.status = 'active' AND f.status = 'confirmed' AND f.kind <> 'tournament'"
         )
     ):
         events.append((row.updated_at, 3, row.fight_id, "adjustment", row))
@@ -221,6 +262,14 @@ def recalculate(
         winner, loser = row.winner_id, row.loser_id
         tracked = from_key is None or (row.fought_at, row.id) >= from_key
         roster.update(player for player in (winner, loser) if player in active)
+        if row.kind == "tournament":
+            # Бой турнира очков лиги не даёт и не считается в калибровку, скидки и личные встречи
+            # таблицы. Пояс и призы за места начисляются боем, который завершил турнир.
+            if row.id in fight_belt:
+                champion = fight_belt[row.id]
+            for player, prize in fight_prize.get(row.id, ()):
+                points[player] += prize
+            continue
         if tracked:
             points_before_place, table_before = snapshot()
 
@@ -246,9 +295,6 @@ def recalculate(
         h2h.add(winner, loser, row.method)
         if row.id in fight_belt:
             champion = fight_belt[row.id]
-        if row.id in fight_prize:
-            prize_winner, prize = fight_prize[row.id]
-            points[prize_winner] += prize
 
         if not tracked:
             continue

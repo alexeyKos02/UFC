@@ -146,6 +146,10 @@ function positive(value: number): number {
         <p v-if="fight.resolution" class="preview">
           {{ fight.resolution.accepted ? 'Засчитан' : 'Отменён' }} администратором {{ fight.resolution.by.nickname }}<template v-if="fight.resolution.reason">: {{ fight.resolution.reason }}</template>
         </p>
+        <p v-if="fight.deletion" class="error-box">
+          Бой удалён {{ formatDateTime(fight.deletion.at) }}<template v-if="fight.deletion.by"> администратором {{ fight.deletion.by.nickname }}</template><template v-if="fight.deletion.reason">: {{ fight.deletion.reason }}</template>.
+          Очки за него сняты, история пересчитана.
+        </p>
 
         <details class="bout-versions" :open="fight.versions.length > 1">
           <summary>История версий: {{ fight.versions.length }}</summary>

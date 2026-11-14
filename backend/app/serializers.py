@@ -198,6 +198,7 @@ def fight_brief(fight: Fight, viewer: User) -> dict:
         "can_dispute": awaits_viewer and version.submitted_by_id != viewer.id,
         "can_correct": fight.status == FightStatus.DISPUTED and fight.initiator_id == viewer.id,
         "dispute_reason": version.dispute_reason if fight.status == FightStatus.DISPUTED else None,
+        "deletion": deletion_out(fight),
     }
 
 
@@ -286,6 +287,9 @@ def tournament_cards(db: Session, tournaments: list[Tournament], viewer: User) -
             "status": tournament.status.value,
             "capacity": tournament.capacity,
             "win_points": tournament.win_points,
+            "second_points": tournament.second_points,
+            "third_points": tournament.third_points,
+            "has_third_place": tournament.has_third_place,
             "seats_taken": seats.get(tournament.id, 0),
             "belt": belt_brief(tournament.belt),
             "winner": player_brief(tournament.winner),
@@ -307,6 +311,12 @@ def round_name(round_no: int, rounds_count: int) -> str:
     if left == 2:
         return "Четвертьфинал"
     return f"1/{2 ** left} финала"
+
+
+def match_name(match: TournamentMatch, rounds_count: int | None) -> str:
+    if match.is_third_place:
+        return "Матч за 3-е место"
+    return round_name(match.round, rounds_count or match.round)
 
 
 def match_state(match: TournamentMatch) -> str:
@@ -333,11 +343,12 @@ def match_out(match: TournamentMatch, viewer: User) -> dict:
         "player2": player_brief(match.player2),
         "winner_id": match.winner_id,
         "is_bye": match.is_bye,
+        "is_third_place": match.is_third_place,
         "state": state,
         "fight_id": match.fight.id if match.fight else None,
         "can_submit": is_player and state == "ready" and tournament.status == TournamentStatus.IN_PROGRESS,
         "tournament": {"id": tournament.id, "title": tournament.title},
-        "round_name": round_name(match.round, tournament.rounds_count or match.round),
+        "round_name": match_name(match, tournament.rounds_count),
     }
 
 
@@ -351,7 +362,7 @@ def upcoming_out(kind: str, target, viewer: User) -> dict:
         "player2": _fighter_out(target.player2),
         "scheduled_at": getattr(target, "scheduled_at", None),
         "tournament": {"id": target.tournament.id, "title": target.tournament.title} if is_tournament else None,
-        "round_name": round_name(target.round, target.tournament.rounds_count or target.round) if is_tournament else None,
+        "round_name": match_name(target, target.tournament.rounds_count) if is_tournament else None,
         "votes": _votes_out(target.votes, target.player1_id, target.player2_id, viewer),
         "can_vote": not is_player,
         "can_submit": is_player,
@@ -432,5 +443,16 @@ def resolution_out(fight: Fight) -> dict | None:
         "by": player_brief(fight.resolved_by),
         "reason": fight.resolution_reason,
         "at": fight.resolved_at,
-        "accepted": fight.status == FightStatus.CONFIRMED,
+        # Засчитанный админом бой мог быть потом удалён — это всё равно «засчитан».
+        "accepted": fight.status != FightStatus.CANCELLED,
+    }
+
+
+def deletion_out(fight: Fight) -> dict | None:
+    if fight.status != FightStatus.DELETED:
+        return None
+    return {
+        "by": player_brief(fight.deleted_by) if fight.deleted_by else None,
+        "reason": fight.deletion_reason,
+        "at": fight.deleted_at,
     }

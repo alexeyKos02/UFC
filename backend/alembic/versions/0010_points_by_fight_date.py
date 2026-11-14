@@ -13,7 +13,6 @@ Revises: 0009
 from alembic import op
 import sqlalchemy as sa
 
-from app.services import recalc
 
 
 revision = '0010'
@@ -28,7 +27,8 @@ def upgrade() -> None:
     op.create_foreign_key(
         op.f('fk_fights_recalculated_by_fight_id_fights'), 'fights', 'fights', ['recalculated_by_fight_id'], ['id']
     )
-    recalc.recalculate(op.get_bind())
+    # Полный пересчёт истории здесь был нужен при переходе на очки по дате боя. Теперь его
+    # делает 0012 (турнирные бои без Elo): текущий recalc читает колонки, которых в 0010 ещё нет.
 
 
 def downgrade() -> None:

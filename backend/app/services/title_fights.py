@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db import utcnow
 from app.errors import bad_request, conflict, forbidden, not_found
-from app.models import Fight, FightKind, FightStatus, TitleFight, TitleFightStatus, User, UserStatus
+from app.models import BeltWin, Fight, FightKind, FightStatus, TitleFight, TitleFightStatus, User, UserStatus
 from app.schemas import FightResultIn, TitleFightIn
 from app.services import belts
 from app.services.fight_records import create_fight_record
@@ -120,4 +120,34 @@ def on_fight_confirmed(db: Session, fight: Fight) -> None:
     title_fight.winner_id = fight.winner_id
     title_fight.is_defense = win.is_defense
     title_fight.completed_at = utcnow()
+    db.flush()
+
+
+def on_fight_deleted(db: Session, fight: Fight, actor: User) -> None:
+    """Откат подтверждённого титульного боя, который удаляет админ (внутри его транзакции).
+
+    Пояс возвращается прежнему чемпиону, назначение снова ждёт результата. Если по этому поясу
+    уже назначен новый бой, старое назначение закрывается как отменённое.
+    """
+    title_fight = _lock(db, fight.title_fight_id)
+    win = db.scalar(select(BeltWin).where(BeltWin.title_fight_id == title_fight.id))
+    if win is not None:
+        belts.revoke(db, win)
+    title_fight.winner_id = None
+    title_fight.is_defense = None
+    title_fight.completed_at = None
+    other_open = db.scalar(
+        select(TitleFight.id).where(
+            TitleFight.belt_id == title_fight.belt_id,
+            TitleFight.status == TitleFightStatus.SCHEDULED,
+            TitleFight.id != title_fight.id,
+        )
+    )
+    if other_open is None:
+        title_fight.status = TitleFightStatus.SCHEDULED
+    else:
+        title_fight.status = TitleFightStatus.CANCELLED
+        title_fight.cancel_reason = "Результат боя удалён, по поясу уже назначен новый бой"
+        title_fight.cancelled_by_id = actor.id
+        title_fight.cancelled_at = utcnow()
     db.flush()

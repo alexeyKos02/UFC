@@ -99,7 +99,7 @@ def test_bye_is_not_a_fight_or_win(admin, players):
     bye_player = next(api for api in apis if api.id == bye["player1"]["id"])
     assert bye["winner_id"] == bye_player.id
     assert bye["fight_id"] is None
-    assert bye_player.profile()["stats"]["fights"] == 0
+    assert bye_player.profile()["stats"]["all"]["fights"] == 0
     assert bye_player.points() == 1000
     final = state["rounds"][1]["matches"][0]
     assert bye_player.id in [p["id"] for p in (final["player1"], final["player2"]) if p]
@@ -125,7 +125,8 @@ def test_parallel_start_generates_bracket_once(admin, players):
         )
     assert {response.status_code for response in responses} == {200}
     state = tournament_state(admin, tournament["id"])
-    assert sum(len(rnd["matches"]) for rnd in state["rounds"]) == 7
+    # 7 матчей сетки на 8 мест и матч за 3-е место.
+    assert sum(len(rnd["matches"]) for rnd in state["rounds"]) == 8
 
 
 def test_join_closed_after_start(admin, players):
@@ -156,7 +157,7 @@ def test_confirmed_result_advances_winner_once(admin, players):
     final = after["rounds"][1]["matches"][0]
     seated = [player["id"] for player in (final["player1"], final["player2"]) if player]
     assert seated == [first.id]
-    assert first.profile()["stats"]["wins"] == 1
+    assert first.profile()["stats"]["all"]["wins"] == 1
 
 
 def test_only_pair_can_submit_and_one_record_per_match(admin, players):

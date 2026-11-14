@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import { setAccount } from '../auth'
 import { BELT_MARK_LABELS, BELT_MARK_ORDER, beltMark } from '../beltMarks'
+import AnimatedNumber from '../components/AnimatedNumber.vue'
 import BeltIcon from '../components/BeltIcon.vue'
 import BeltMarkIcon from '../components/BeltMarkIcon.vue'
 import ChampionMark from '../components/ChampionMark.vue'
@@ -11,12 +12,13 @@ import FightCard from '../components/FightCard.vue'
 import HeadToHead from '../components/HeadToHead.vue'
 import PlayerChip from '../components/PlayerChip.vue'
 import RatingChart from '../components/RatingChart.vue'
+import SegmentedToggle from '../components/SegmentedToggle.vue'
 import SkeletonBlock from '../components/SkeletonBlock.vue'
 import StateBlock from '../components/StateBlock.vue'
 import WinLossBar from '../components/WinLossBar.vue'
 import { useAction, useLoad } from '../feedback'
 import { formatDate, plural, tierLabel } from '../format'
-import type { Account, FightBrief, PlayerProfile, RatingHistoryPoint } from '../types'
+import type { Account, FightBrief, PlayerProfile, RatingHistoryPoint, StatScope } from '../types'
 
 const HISTORY_PAGE = 10
 
@@ -41,6 +43,15 @@ const chartBeltMarks = computed(() => {
   const present = new Set(chartHistory.value.map(beltMark))
   return BELT_MARK_ORDER.filter((mark) => present.has(mark))
 })
+
+/** Статистика профиля: все бои, только лига (обычные и титульные) или только турниры. */
+const statScope = ref<StatScope>('all')
+const statScopes: { value: StatScope; label: string }[] = [
+  { value: 'all', label: 'Все бои' },
+  { value: 'league', label: 'Лига' },
+  { value: 'tournament', label: 'Турниры' },
+]
+const stats = computed(() => data.value?.stats[statScope.value])
 
 type ResultFilter = 'all' | 'wins' | 'losses'
 const result = ref<ResultFilter>('all')
@@ -125,13 +136,19 @@ async function upload(event: Event, path: string): Promise<void> {
               <span v-if="data.player.status === 'blocked'" class="badge tone-red">Заблокирован</span>
             </div>
 
+            <SegmentedToggle
+              v-model="statScope"
+              label="Какие бои считать в статистике"
+              :options="statScopes.map((option) => ({ ...option, count: data!.stats[option.value].fights }))"
+            />
+
             <div class="tiles">
               <div v-if="!data.rating.is_champion" class="tile">
                 <b>{{ data.rating.display_place === null ? '—' : `№${data.rating.display_place}` }}</b>
                 <span>Место<template v-if="data.rating.is_special"> · Спецместо</template></span>
               </div>
               <div class="tile"><b>{{ data.rating.points }}</b><span>Очки</span></div>
-              <div class="tile"><b>{{ data.stats.best_streak }}</b><span>Лучшая серия</span></div>
+              <div v-if="stats" class="tile"><b><AnimatedNumber :value="stats.best_streak" /></b><span>Лучшая серия</span></div>
             </div>
 
             <p v-if="data.rating.is_calibrating" class="small muted">
@@ -141,26 +158,34 @@ async function upload(event: Event, path: string): Promise<void> {
               {{ inactivityLine(data.rating.inactivity) }}
             </p>
 
-            <WinLossBar :wins="data.stats.wins" :losses="data.stats.losses" :win-rate="data.stats.win_rate" />
+            <WinLossBar v-if="stats" :wins="stats.wins" :losses="stats.losses" :win-rate="stats.win_rate" />
 
             <HeadToHead v-if="data.head_to_head" :h2h="data.head_to_head" :rival="data.player" />
 
             <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr))">
               <div class="card stack">
                 <h3>Хозяин</h3>
-                <div v-for="item in data.stats.nemeses" :key="item.player.id" class="row between">
-                  <PlayerChip :player="item.player" />
-                  <span class="small muted">Поражений: {{ item.count }}</span>
-                </div>
-                <p v-if="!data.stats.nemeses.length" class="small muted">Поражений пока не было</p>
+                <Transition name="stat-swap" mode="out-in">
+                  <div :key="statScope" class="stack">
+                    <div v-for="item in stats?.nemeses ?? []" :key="item.player.id" class="row between">
+                      <PlayerChip :player="item.player" />
+                      <span class="small muted">Поражений: {{ item.count }}</span>
+                    </div>
+                    <p v-if="!stats?.nemeses.length" class="small muted">Поражений пока не было</p>
+                  </div>
+                </Transition>
               </div>
               <div class="card stack">
                 <h3>Владеет</h3>
-                <div v-for="item in data.stats.victims" :key="item.player.id" class="row between">
-                  <PlayerChip :player="item.player" />
-                  <span class="small muted">Побед: {{ item.count }}</span>
-                </div>
-                <p v-if="!data.stats.victims.length" class="small muted">Побед пока не было</p>
+                <Transition name="stat-swap" mode="out-in">
+                  <div :key="statScope" class="stack">
+                    <div v-for="item in stats?.victims ?? []" :key="item.player.id" class="row between">
+                      <PlayerChip :player="item.player" />
+                      <span class="small muted">Побед: {{ item.count }}</span>
+                    </div>
+                    <p v-if="!stats?.victims.length" class="small muted">Побед пока не было</p>
+                  </div>
+                </Transition>
               </div>
             </div>
           </div>

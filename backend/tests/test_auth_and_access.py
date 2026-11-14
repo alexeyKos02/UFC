@@ -110,7 +110,7 @@ def test_block_ends_open_sessions_but_keeps_history(owner, players):
 
     profile = witness.get(f"/players/{first.id}").json()
     assert profile["player"]["status"] == "blocked"
-    assert profile["stats"]["wins"] == 1
+    assert profile["stats"]["all"]["wins"] == 1
     assert profile["rating"]["display_place"] is None
     assert witness.get(f"/fights/{fight['id']}").status_code == 200
     league_ids = [row["player"]["id"] for row in witness.get("/players").json()]

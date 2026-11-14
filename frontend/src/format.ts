@@ -22,9 +22,16 @@ export const tierLabel: Record<RatingTier, string> = {
 export const CALIBRATION_FIGHTS = 5
 
 /** Сколько очков рекомендуем за победу в турнире: по 10 за каждый круг сетки. */
-export function recommendedTournamentPoints(capacity: number): number {
+/**
+ * Подсказка призов турнира в очки лиги. Бои турнира очков лиги не дают, поэтому приз заметный:
+ * 25 очков за каждый круг сетки за 1-е место, 40% от него за 2-е, за 3-е — 20% (матч за 3-е место)
+ * или 15% каждому из двух проигравших полуфиналистов.
+ */
+export function recommendedTournamentPrizes(capacity: number, hasThirdPlace: boolean): { first: number; second: number; third: number } {
   const rounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, capacity))))
-  return rounds * 10
+  const first = rounds * 25
+  const third = rounds < 2 ? 0 : Math.round(first * (hasThirdPlace ? 0.2 : 0.15))
+  return { first, second: Math.round(first * 0.4), third }
 }
 
 export const fightStatusLabel: Record<FightStatus, string> = {
@@ -32,6 +39,7 @@ export const fightStatusLabel: Record<FightStatus, string> = {
   disputed: 'Оспорен',
   confirmed: 'Подтверждён',
   cancelled: 'Отменён',
+  deleted: 'Удалён',
 }
 
 export const boutCaption: Record<FightKind, string> = {
@@ -63,6 +71,7 @@ export const matchStateLabel: Record<MatchState, string> = {
   disputed: 'Оспорен',
   confirmed: 'Завершён',
   cancelled: 'Отменён',
+  deleted: 'Удалён',
 }
 
 export const titleStatusLabel: Record<TitleFightStatus, string> = {

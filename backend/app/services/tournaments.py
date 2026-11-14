@@ -9,6 +9,7 @@ from app.errors import bad_request, conflict, forbidden, not_found
 from app.models import (
     Belt,
     BeltKind,
+    BeltWin,
     Fight,
     FightKind,
     FightStatus,
@@ -54,6 +55,10 @@ def create_tournament(db: Session, actor: User, data: TournamentIn) -> Tournamen
         description=data.description,
         capacity=data.capacity,
         win_points=data.win_points,
+        second_points=data.second_points,
+        third_points=data.third_points,
+        # Из двух участников полуфиналов нет, матч за 3-е место не нужен.
+        has_third_place=data.has_third_place and data.capacity > 2,
         belt_id=data.belt_id,
         created_by_id=actor.id,
     )
@@ -83,10 +88,14 @@ def update_tournament(db: Session, tournament_id: int, data: TournamentIn) -> To
         _check_belt(db, data.belt_id)
         tournament.capacity = data.capacity
         tournament.belt_id = data.belt_id
-    if data.win_points != tournament.win_points:
+    prizes = (data.win_points, data.second_points, data.third_points)
+    if prizes != (tournament.win_points, tournament.second_points, tournament.third_points):
         if tournament.status in (TournamentStatus.FINISHED, TournamentStatus.CANCELLED):
-            raise conflict("После завершения турнира нельзя менять очки за победу")
-        tournament.win_points = data.win_points
+            raise conflict("После завершения турнира нельзя менять призы")
+        tournament.win_points, tournament.second_points, tournament.third_points = prizes
+    wants_third = data.has_third_place and tournament.capacity > 2
+    if wants_third != tournament.has_third_place:
+        _set_third_place(db, tournament, wants_third)
     try:
         db.commit()
     except IntegrityError:
@@ -158,6 +167,11 @@ def _generate_bracket(db: Session, tournament: Tournament, player_ids: list[int]
             matches[(round_no, position)] = match
             db.add(match)
 
+    if rounds_count < 2:
+        tournament.has_third_place = False
+    if tournament.has_third_place:
+        db.add(_new_third_place_match(tournament))
+
     first_round_positions = list(range(bracket_size // 2))
     rng.shuffle(first_round_positions)
     byes_count = bracket_size - len(player_ids)
@@ -197,6 +211,7 @@ def start(db: Session, tournament_id: int) -> Tournament:
     if len(player_ids) < 2:
         raise conflict("Для старта нужно минимум два активных участника")
     _generate_bracket(db, tournament, player_ids)
+    _sync_third_place(db, tournament)
     tournament.status = TournamentStatus.IN_PROGRESS
     tournament.started_at = utcnow()
     db.commit()
@@ -259,7 +274,11 @@ def submit_match_result(db: Session, actor: User, match_id: int, data: FightResu
 
 
 def on_fight_confirmed(db: Session, fight: Fight) -> None:
-    """Вызывается внутри транзакции финального подтверждения."""
+    """Вызывается внутри транзакции финального подтверждения.
+
+    Финал отдаёт пояс; турнир завершается, когда сыграны финал и (если он есть) матч за 3-е место.
+    Призы в очки лиги начисляет пересчёт очков сразу после этого вызова.
+    """
     match = db.scalar(
         select(TournamentMatch)
         .where(TournamentMatch.id == fight.tournament_match_id)
@@ -273,22 +292,191 @@ def on_fight_confirmed(db: Session, fight: Fight) -> None:
         raise conflict("Результат матча уже подтверждён")
     match.winner_id = fight.winner_id
 
-    if match.round == tournament.rounds_count:
-        tournament.status = TournamentStatus.FINISHED
+    if match.is_third_place:
+        pass
+    elif match.round == tournament.rounds_count:
         tournament.winner_id = fight.winner_id
-        tournament.finished_at = utcnow()
         belts.award(db, tournament.belt_id, fight, tournament_id=tournament.id)
-        # Приз турнира (win_points) начисляет пересчёт очков сразу после этого вызова.
     else:
-        next_match = db.scalar(
-            select(TournamentMatch)
-            .where(
-                TournamentMatch.tournament_id == tournament.id,
-                TournamentMatch.round == match.round + 1,
-                TournamentMatch.position == match.position // 2,
-            )
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-        _seat_in_next_round(next_match, match.position, fight.winner_id)
+        _seat_in_next_round(_next_match(db, tournament, match), match.position, fight.winner_id)
+        if match.round == tournament.rounds_count - 1:
+            db.flush()
+            _sync_third_place(db, tournament)
     db.flush()
+    _finish_if_done(db, tournament)
+    db.flush()
+
+
+def on_fight_deleted(db: Session, fight: Fight) -> None:
+    """Откат подтверждённого боя турнира, который удаляет админ (внутри его транзакции).
+
+    Матч снова ждёт результата. Победитель убирается из следующего круга, проигравший полуфиналист —
+    из матча за 3-е место, если там ещё нет боя. Финал снова открывает турнир и забирает пояс,
+    матч за 3-е место — только открывает. В отменённом турнире сетку не трогаем.
+    """
+    match = db.scalar(
+        select(TournamentMatch)
+        .where(TournamentMatch.id == fight.tournament_match_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    tournament = lock_tournament(db, match.tournament_id)
+    if tournament.status == TournamentStatus.CANCELLED or match.winner_id is None:
+        return
+
+    if match.is_third_place:
+        pass
+    elif match.round == tournament.rounds_count:
+        win = db.scalar(select(BeltWin).where(BeltWin.tournament_id == tournament.id))
+        if win is not None:
+            belts.revoke(db, win)
+        tournament.winner_id = None
+    else:
+        next_match = _next_match(db, tournament, match)
+        if _has_fight(db, next_match) or next_match.winner_id is not None:
+            raise conflict(
+                "Победитель этого матча уже играл следующий круг. Сначала удалите или отмените бой следующего круга"
+            )
+        third = _third_place_match(db, tournament)
+        semifinal = match.round == tournament.rounds_count - 1
+        if semifinal and third is not None and (_has_fight(db, third) or (third.winner_id and not third.is_bye)):
+            raise conflict("Матч за 3-е место уже сыгран или записан. Сначала удалите или отмените его бой")
+        if match.position % 2 == 0:
+            next_match.player1_id = None
+        else:
+            next_match.player2_id = None
+    match.winner_id = None
+    if tournament.status == TournamentStatus.FINISHED:
+        tournament.status = TournamentStatus.IN_PROGRESS
+        tournament.finished_at = None
+    db.flush()
+    if match.round == tournament.rounds_count - 1:
+        _sync_third_place(db, tournament)
+    db.flush()
+
+
+def _lock_match(db: Session, stmt) -> TournamentMatch | None:
+    return db.scalar(stmt.with_for_update().execution_options(populate_existing=True))
+
+
+def _next_match(db: Session, tournament: Tournament, match: TournamentMatch) -> TournamentMatch:
+    return _lock_match(
+        db,
+        select(TournamentMatch).where(
+            TournamentMatch.tournament_id == tournament.id,
+            TournamentMatch.round == match.round + 1,
+            TournamentMatch.position == match.position // 2,
+            TournamentMatch.is_third_place.is_(False),
+        ),
+    )
+
+
+def _third_place_match(db: Session, tournament: Tournament) -> TournamentMatch | None:
+    return _lock_match(
+        db,
+        select(TournamentMatch).where(
+            TournamentMatch.tournament_id == tournament.id, TournamentMatch.is_third_place.is_(True)
+        ),
+    )
+
+
+def _has_fight(db: Session, match: TournamentMatch) -> bool:
+    return db.scalar(select(Fight.id).where(Fight.tournament_match_id == match.id)) is not None
+
+
+def _new_third_place_match(tournament: Tournament) -> TournamentMatch:
+    # Финал — позиция 0 последнего круга, матч за 3-е место стоит рядом с ним.
+    return TournamentMatch(
+        tournament_id=tournament.id, round=tournament.rounds_count, position=1, is_third_place=True
+    )
+
+
+def semifinal_losers(db: Session, tournament: Tournament) -> list[int | None]:
+    """Проигравшие в полуфиналах по позициям 0 и 1; None — полуфинал не сыгран или без соперника."""
+    if (tournament.rounds_count or 0) < 2:
+        return []
+    semis = {
+        match.position: match
+        for match in db.scalars(
+            select(TournamentMatch).where(
+                TournamentMatch.tournament_id == tournament.id,
+                TournamentMatch.round == tournament.rounds_count - 1,
+            )
+        )
+    }
+    losers: list[int | None] = []
+    for position in (0, 1):
+        match = semis.get(position)
+        if match is None or match.is_bye or match.winner_id is None:
+            losers.append(None)
+        else:
+            losers.append(match.player2_id if match.winner_id == match.player1_id else match.player1_id)
+    return losers
+
+
+def _sync_third_place(db: Session, tournament: Tournament) -> None:
+    """Сажает проигравших полуфиналистов в матч за 3-е место (пока его бой ещё не записан).
+
+    Если полуфиналы сыграны, а проигравший только один (второй полуфинал без соперника),
+    ему 3-е место достаётся без боя.
+    """
+    if not tournament.has_third_place:
+        return
+    third = _third_place_match(db, tournament)
+    if third is None or _has_fight(db, third):
+        return
+    semis_done = db.scalar(
+        select(func.count()).where(
+            TournamentMatch.tournament_id == tournament.id,
+            TournamentMatch.round == tournament.rounds_count - 1,
+            TournamentMatch.winner_id.is_(None),
+        )
+    ) == 0
+    losers = semifinal_losers(db, tournament)
+    third.player1_id, third.player2_id = losers
+    present = [loser for loser in losers if loser is not None]
+    third.is_bye = semis_done and len(present) == 1
+    third.winner_id = present[0] if third.is_bye else None
+    db.flush()
+
+
+def _finish_if_done(db: Session, tournament: Tournament) -> None:
+    final = db.scalar(
+        select(TournamentMatch).where(
+            TournamentMatch.tournament_id == tournament.id,
+            TournamentMatch.round == tournament.rounds_count,
+            TournamentMatch.is_third_place.is_(False),
+        )
+    )
+    if final is None or final.winner_id is None:
+        return
+    third = _third_place_match(db, tournament) if tournament.has_third_place else None
+    if third is not None and third.winner_id is None and not third.is_bye:
+        return
+    tournament.status = TournamentStatus.FINISHED
+    tournament.finished_at = utcnow()
+
+
+def _set_third_place(db: Session, tournament: Tournament, enabled: bool) -> None:
+    """Галочка «Матч за 3-е место»: до старта — просто настройка, в идущем турнире — матч в сетке."""
+    if tournament.status in (TournamentStatus.FINISHED, TournamentStatus.CANCELLED):
+        raise conflict("После завершения турнира матч за 3-е место не включить и не убрать")
+    if tournament.status != TournamentStatus.IN_PROGRESS:
+        tournament.has_third_place = enabled
+        return
+    if enabled:
+        if (tournament.rounds_count or 0) < 2:
+            raise conflict("В сетке нет полуфиналов, матч за 3-е место не нужен")
+        db.add(_new_third_place_match(tournament))
+        tournament.has_third_place = True
+        db.flush()
+        _sync_third_place(db, tournament)
+        return
+    third = _third_place_match(db, tournament)
+    if third is not None:
+        if _has_fight(db, third):
+            raise conflict("Бой за 3-е место уже записан. Сначала удалите или отмените его")
+        db.delete(third)
+    tournament.has_third_place = False
+    db.flush()
+    _finish_if_done(db, tournament)

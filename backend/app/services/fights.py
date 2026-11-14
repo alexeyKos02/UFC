@@ -1,12 +1,12 @@
 """Жизненный цикл результата: создание, подтверждение, оспаривание, исправление."""
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import utcnow
 from app.errors import bad_request, conflict, forbidden, not_found
-from app.models import Fight, FightConfirmation, FightKind, FightStatus, User, UserStatus
+from app.models import Fight, FightConfirmation, FightKind, FightStatus, RatingChange, User, UserStatus
 from app.schemas import FightCorrectIn, FightCreateIn
 from app.services import rating, recalc, title_fights, tournaments
 from app.services.fight_records import (
@@ -190,4 +190,38 @@ def admin_cancel(db: Session, actor: User, fight_id: int, reason: str) -> Fight:
     fight.title_fight_id = None
     fight.tournament_match_id = None
     db.commit()
+    return fight
+
+
+def admin_delete(db: Session, actor: User, fight_id: int, reason: str) -> Fight:
+    """Админ удаляет подтверждённый бой. Запись остаётся со статусом deleted и причиной.
+
+    Откат: начисления боя убираются и история пересчитывается с даты боя; титульный бой
+    возвращает пояс прежнему чемпиону, бой турнира снова открывает матч (см. on_fight_deleted).
+    Анонс, титульный бой или матч отвязываются, чтобы их можно было сыграть заново.
+    """
+    rating.acquire_rating_lock(db)
+    fight = _lock_fight(db, fight_id)
+    if fight.status == FightStatus.DELETED:
+        return fight
+    if fight.status != FightStatus.CONFIRMED:
+        raise conflict("Удалить можно только подтверждённый бой. Зависший бой отмените в «Боях без итога»")
+    if fight.kind == FightKind.TOURNAMENT and fight.tournament_match_id is not None:
+        tournaments.on_fight_deleted(db, fight)
+    elif fight.kind == FightKind.TITLE and fight.title_fight_id is not None:
+        title_fights.on_fight_deleted(db, fight, actor)
+
+    now = utcnow()
+    fight.status = FightStatus.DELETED
+    fight.deleted_by_id = actor.id
+    fight.deletion_reason = reason
+    fight.deleted_at = now
+    fight.planned_fight_id = None
+    fight.title_fight_id = None
+    fight.tournament_match_id = None
+    db.execute(delete(RatingChange).where(RatingChange.fight_id == fight.id))
+    db.flush()
+    recalc.recalculate(db.connection(), (fight.fought_at, fight.id), trigger_fight_id=fight.id, now=now)
+    db.commit()
+    db.expire_all()
     return fight

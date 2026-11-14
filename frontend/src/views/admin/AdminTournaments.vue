@@ -6,7 +6,7 @@ import Modal from '../../components/Modal.vue'
 import StateBlock from '../../components/StateBlock.vue'
 import StatusBadge from '../../components/StatusBadge.vue'
 import { useAction, useLoad } from '../../feedback'
-import { recommendedTournamentPoints, seatsLine } from '../../format'
+import { recommendedTournamentPrizes, seatsLine } from '../../format'
 import type { Belt, TournamentCard } from '../../types'
 
 const list = useLoad(() => api.get<TournamentCard[]>('/admin/tournaments'))
@@ -14,12 +14,35 @@ const belts = useLoad(() => api.get<Belt[]>('/belts'))
 const { busy, run } = useAction()
 
 const tournamentBelts = computed(() => (belts.data.value ?? []).filter((belt) => belt.kind === 'tournament'))
-const emptyForm = { title: '', description: '', capacity: 8, win_points: recommendedTournamentPoints(8), belt_id: 0 }
+const defaultPrizes = recommendedTournamentPrizes(8, true)
+const emptyForm = {
+  title: '',
+  description: '',
+  capacity: 8,
+  win_points: defaultPrizes.first,
+  second_points: defaultPrizes.second,
+  third_points: defaultPrizes.third,
+  has_third_place: true,
+  belt_id: 0,
+}
 const form = reactive({ ...emptyForm })
 const editingId = ref<number | null>(null)
 const cancelling = ref<TournamentCard | null>(null)
 const reason = ref('')
-const recommendedPoints = computed(() => recommendedTournamentPoints(form.capacity || 2))
+const canHaveThirdPlace = computed(() => (form.capacity || 2) > 2)
+const recommended = computed(() => recommendedTournamentPrizes(form.capacity || 2, form.has_third_place && canHaveThirdPlace.value))
+const isRecommended = computed(
+  () =>
+    form.win_points === recommended.value.first &&
+    form.second_points === recommended.value.second &&
+    form.third_points === recommended.value.third,
+)
+
+function applyRecommended(): void {
+  form.win_points = recommended.value.first
+  form.second_points = recommended.value.second
+  form.third_points = recommended.value.third
+}
 
 function edit(item: TournamentCard): void {
   editingId.value = item.id
@@ -28,6 +51,9 @@ function edit(item: TournamentCard): void {
     description: item.description,
     capacity: item.capacity,
     win_points: item.win_points,
+    second_points: item.second_points,
+    third_points: item.third_points,
+    has_third_place: item.has_third_place,
     belt_id: item.belt.id,
   })
   window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -39,7 +65,7 @@ function reset(): void {
 }
 
 async function save(): Promise<void> {
-  const body = { ...form }
+  const body = { ...form, has_third_place: form.has_third_place && canHaveThirdPlace.value }
   const id = editingId.value
   const done = await run(
     () => (id ? api.patch(`/admin/tournaments/${id}`, body) : api.post('/admin/tournaments', body)),
@@ -76,13 +102,6 @@ async function cancel(): Promise<void> {
       <div class="field-grid">
         <label class="field">Название<input v-model="form.title" required maxlength="120" /></label>
         <label class="field">Лимит участников<input v-model.number="form.capacity" type="number" min="2" max="128" required /></label>
-        <div class="stack" style="gap: 6px">
-          <label class="field">Очки за победу в турнире<input v-model.number="form.win_points" type="number" min="0" max="100000" step="1" required /></label>
-          <p class="small muted" style="margin: 0">
-            Рекомендуем {{ recommendedPoints }}: по 10 очков за каждый круг сетки. Бои турнира и так дают очки по Elo.
-          </p>
-          <button v-if="form.win_points !== recommendedPoints" class="btn sm" type="button" style="align-self: flex-start" @click="form.win_points = recommendedPoints">Поставить {{ recommendedPoints }}</button>
-        </div>
         <label class="field">
           Турнирный пояс
           <select v-model.number="form.belt_id" required>
@@ -91,6 +110,32 @@ async function cancel(): Promise<void> {
           </select>
         </label>
       </div>
+      <fieldset class="prize-fields stack">
+        <legend>Призы в очки лиги</legend>
+        <p class="small muted">
+          Бои турнира очков лиги не дают — только призы за места. Менять их можно, пока турнир не завершён.
+        </p>
+        <div class="field-grid">
+          <label class="field">1-е место<input v-model.number="form.win_points" type="number" min="0" max="100000" step="1" required /></label>
+          <label class="field">2-е место<input v-model.number="form.second_points" type="number" min="0" max="100000" step="1" required /></label>
+          <label class="field">
+            3-е место{{ form.has_third_place && canHaveThirdPlace ? '' : ' (каждому полуфиналисту)' }}
+            <input v-model.number="form.third_points" type="number" min="0" max="100000" step="1" required :disabled="!canHaveThirdPlace" />
+          </label>
+        </div>
+        <label class="check">
+          <input v-model="form.has_third_place" type="checkbox" :disabled="!canHaveThirdPlace" />
+          Матч за 3-е место
+          <span class="small muted">{{ canHaveThirdPlace ? '— проигравшие в полуфиналах играют между собой. Без него 3-е место делят оба' : '— в турнире на двоих полуфиналов нет' }}</span>
+        </label>
+        <div class="row">
+          <span class="small muted">
+            Рекомендуем {{ recommended.first }} / {{ recommended.second }} / {{ recommended.third }}: 25 очков за круг сетки за 1-е место,
+            40% за 2-е, {{ form.has_third_place && canHaveThirdPlace ? '20% за 3-е' : '15% каждому за 3-е' }}.
+          </span>
+          <button v-if="!isRecommended" class="btn sm" type="button" @click="applyRecommended">Поставить рекомендованные</button>
+        </div>
+      </fieldset>
       <label class="field">Описание<textarea v-model="form.description" maxlength="2000"></textarea></label>
       <div class="row">
         <button class="btn primary" type="submit" :disabled="busy || !form.belt_id">{{ editingId ? 'Сохранить' : 'Создать черновик' }}</button>
@@ -103,7 +148,7 @@ async function cancel(): Promise<void> {
     <div v-if="list.data.value?.length" class="table-wrap">
       <table>
         <thead>
-          <tr><th>Турнир</th><th>Статус</th><th class="hide-sm">Пояс</th><th class="num">Места</th><th class="num hide-sm">Очки</th><th>Действия</th></tr>
+          <tr><th>Турнир</th><th>Статус</th><th class="hide-sm">Пояс</th><th class="num">Места</th><th class="num hide-sm">Призы</th><th>Действия</th></tr>
         </thead>
         <tbody>
           <tr v-for="item in list.data.value" :key="item.id">
@@ -111,7 +156,7 @@ async function cancel(): Promise<void> {
             <td><StatusBadge :tournament="item.status" /></td>
             <td class="hide-sm small">{{ item.belt.name }}</td>
             <td class="num small">{{ seatsLine(item) }}</td>
-            <td class="num small hide-sm">+{{ item.win_points }}</td>
+            <td class="num small hide-sm" style="white-space: nowrap">{{ item.win_points }} / {{ item.second_points }} / {{ item.third_points }}</td>
             <td>
               <div class="row" style="gap: 6px">
                 <button v-if="item.status === 'draft'" class="btn sm primary" :disabled="busy" @click="act(item, 'publish', 'Регистрация открыта')">Открыть регистрацию</button>
