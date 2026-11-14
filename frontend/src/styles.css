@@ -1072,16 +1072,6 @@ th.num {
   color: var(--text-3);
 }
 
-.winner-mark {
-  color: var(--gold);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.is-loser {
-  color: var(--text-3);
-}
-
 .belt-icon {
   flex: none;
   display: block;
@@ -1157,66 +1147,6 @@ th.num {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--red);
-}
-
-/* Сетка */
-.bracket {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(230px, 1fr);
-  gap: 18px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-}
-
-.bracket-round {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.bracket-round h3 {
-  font-size: 15px;
-  text-transform: uppercase;
-  color: var(--text-2);
-}
-
-.bracket-matches {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  gap: 12px;
-  flex: 1;
-}
-
-.match {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.match.mine {
-  border-color: var(--red-strong);
-}
-
-.match-player {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--border);
-  min-height: 42px;
-}
-
-.match-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 10px;
-  flex-wrap: wrap;
 }
 
 .tbd {
@@ -2407,24 +2337,6 @@ th.num {
     grid-column: 1 / -1;
     grid-row: 2;
   }
-
-  /* На телефоне раунды идут друг под другом, каждый со своим заголовком. */
-  .bracket {
-    display: flex;
-    flex-direction: column;
-    overflow: visible;
-    gap: 22px;
-  }
-
-  .bracket-round h3 {
-    position: sticky;
-    top: 60px;
-    z-index: 5;
-    padding: 6px 0;
-    background: var(--bg);
-    font-size: 16px;
-    color: var(--text);
-  }
 }
 
 /* Заголовок сворачиваемого раздела (CollapsibleSection): кнопка во всю ширину строки. */
@@ -2521,23 +2433,6 @@ th.num {
 
 input:disabled {
   opacity: 0.55;
-}
-
-/* Матч за 3-е место в колонке финала: отделён от финала и подписан. */
-.match.third-place {
-  margin-top: 18px;
-  border-style: dashed;
-}
-
-.match-label {
-  margin: 0;
-  padding: 8px 10px 6px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-3);
 }
 
 /* Переключатель-плашка (SegmentedToggle): подложка выбранной кнопки переезжает «желе». */
@@ -2740,4 +2635,119 @@ span.anum > span.anum-value {
   .anum-down-leave-active {
     transition: none;
   }
+}
+
+/* Турнирная сетка (TournamentBracket, BracketMatch): круги колонками, матчи соединены линиями (SVG),
+   матч за 3-е место под финалом. Карточки матчей — прежние. */
+.bracket {
+  position: relative;
+  display: grid;
+  /* Без своей прокрутки: колонки делят ширину страницы и сужаются вместе с ней. */
+  grid-template-columns: repeat(var(--bracket-rounds), minmax(0, 1fr));
+  column-gap: 32px;
+}
+
+.bracket-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.bracket-lines path {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.bracket-round {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bracket-round h3,
+.bracket-third h3,
+.bracket-mobile-item h3 {
+  font-size: 15px;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+/* Каждый матч в ячейке равной высоты: матч следующего круга стоит ровно между своей парой.
+   Отступ ячеек разводит карточки первого круга, которые раньше стояли вплотную. */
+.bracket-matches {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.bracket-slot {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 11px 0;
+}
+
+.bracket-slot > .match {
+  width: 100%;
+}
+
+.bracket-third {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bracket-mobile {
+  gap: 16px;
+}
+
+.bracket-mobile-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.match {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.match.mine {
+  border-color: var(--red-strong);
+}
+
+.match-player {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  min-height: 42px;
+}
+
+.match-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  flex-wrap: wrap;
+}
+
+.winner-mark {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.is-loser {
+  color: var(--text-3);
 }
