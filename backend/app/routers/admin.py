@@ -35,6 +35,7 @@ from app.schemas import (
     SpecialPlaceIn,
     TitleFightIn,
     TournamentIn,
+    WalkoverIn,
 )
 from app.serializers import (
     admin_user_out,
@@ -94,6 +95,19 @@ def publish_tournament(tournament_id: int, viewer: StaffUser, db: Db) -> dict:
 @router.post("/tournaments/{tournament_id}/start")
 def start_tournament(tournament_id: int, viewer: StaffUser, db: Db) -> dict:
     return tournament_detail(db, tournaments.start(db, tournament_id), viewer)
+
+
+@router.post("/tournaments/matches/{match_id}/walkover")
+def admin_walkover(match_id: int, body: WalkoverIn, viewer: StaffUser, db: Db) -> dict:
+    """Техническая победа в матче турнира: соперник не явился. Боя нет, в статистику не идёт."""
+    match = tournaments.award_walkover(db, viewer, match_id, body.winner_id, body.reason)
+    return tournament_detail(db, match.tournament, viewer)
+
+
+@router.post("/tournaments/matches/{match_id}/walkover/cancel")
+def admin_cancel_walkover(match_id: int, viewer: StaffUser, db: Db) -> dict:
+    match = tournaments.cancel_walkover(db, match_id)
+    return tournament_detail(db, match.tournament, viewer)
 
 
 @router.post("/tournaments/{tournament_id}/cancel")

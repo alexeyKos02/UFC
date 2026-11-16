@@ -21,7 +21,7 @@ from app.models import (
     UserStatus,
 )
 from app.schemas import FightResultIn, TournamentIn
-from app.services import belts
+from app.services import belts, recalc
 from app.services.fight_records import create_fight_record
 from app.services.rating import acquire_rating_lock
 
@@ -290,15 +290,25 @@ def on_fight_confirmed(db: Session, fight: Fight) -> None:
         raise conflict("Турнир не идёт, подтвердить результат нельзя")
     if match.winner_id is not None:
         raise conflict("Результат матча уже подтверждён")
-    match.winner_id = fight.winner_id
+    _record_winner(db, tournament, match, fight.winner_id, fight)
 
+
+def _is_final(tournament: Tournament, match: TournamentMatch) -> bool:
+    return match.round == tournament.rounds_count and not match.is_third_place
+
+
+def _record_winner(
+    db: Session, tournament: Tournament, match: TournamentMatch, winner_id: int, fight: Fight | None
+) -> None:
+    """Победитель матча (по бою или технический) проходит дальше; финал отдаёт пояс, турнир может завершиться."""
+    match.winner_id = winner_id
     if match.is_third_place:
         pass
-    elif match.round == tournament.rounds_count:
-        tournament.winner_id = fight.winner_id
+    elif _is_final(tournament, match):
+        tournament.winner_id = winner_id
         belts.award(db, tournament.belt_id, fight, tournament_id=tournament.id)
     else:
-        _seat_in_next_round(_next_match(db, tournament, match), match.position, fight.winner_id)
+        _seat_in_next_round(_next_match(db, tournament, match), match.position, winner_id)
         if match.round == tournament.rounds_count - 1:
             db.flush()
             _sync_third_place(db, tournament)
@@ -323,10 +333,15 @@ def on_fight_deleted(db: Session, fight: Fight) -> None:
     tournament = lock_tournament(db, match.tournament_id)
     if tournament.status == TournamentStatus.CANCELLED or match.winner_id is None:
         return
+    _rollback_winner(db, tournament, match)
 
+
+def _rollback_winner(db: Session, tournament: Tournament, match: TournamentMatch) -> None:
+    """Матч снова без победителя: победитель уходит из следующего круга (если там ещё нет боя),
+    финал забирает пояс, завершённый турнир снова идёт."""
     if match.is_third_place:
         pass
-    elif match.round == tournament.rounds_count:
+    elif _is_final(tournament, match):
         win = db.scalar(select(BeltWin).where(BeltWin.tournament_id == tournament.id))
         if win is not None:
             belts.revoke(db, win)
@@ -480,3 +495,100 @@ def _set_third_place(db: Session, tournament: Tournament, enabled: bool) -> None
     tournament.has_third_place = False
     db.flush()
     _finish_if_done(db, tournament)
+
+
+def award_walkover(db: Session, actor: User, match_id: int, winner_id: int, reason: str) -> TournamentMatch:
+    """Техническая победа: соперник не явился, победителя назначает админ или владелец.
+
+    Боя нет: исход не идёт в статистику и очки лиги, простой не сбрасывает. В финале не присуждается.
+    Записанный, но не подтверждённый результат матча отменяется.
+    """
+    acquire_rating_lock(db)
+    match = _lock_match(db, select(TournamentMatch).where(TournamentMatch.id == match_id))
+    if match is None:
+        raise not_found("Матч не найден")
+    tournament = lock_tournament(db, match.tournament_id)
+    if match.walkover_at is not None and match.winner_id == winner_id:
+        return match
+    if tournament.status != TournamentStatus.IN_PROGRESS:
+        raise conflict("Турнир не идёт, техническую победу присудить нельзя")
+    if _is_final(tournament, match):
+        raise conflict("В финале техническая победа не присуждается")
+    if match.is_bye or match.player1_id is None or match.player2_id is None:
+        raise conflict("Пара для этого матча ещё не определена")
+    if match.winner_id is not None:
+        raise conflict("У матча уже есть победитель")
+    if winner_id not in (match.player1_id, match.player2_id):
+        raise bad_request("Победителем может быть только участник матча")
+
+    now = utcnow()
+    open_fight = db.scalar(
+        select(Fight).where(Fight.tournament_match_id == match.id).with_for_update().execution_options(populate_existing=True)
+    )
+    if open_fight is not None:
+        if open_fight.status == FightStatus.CONFIRMED:
+            raise conflict("Результат матча уже подтверждён")
+        # Записанный результат не подтвердили — он отменяется вместе с назначением победителя.
+        open_fight.status = FightStatus.CANCELLED
+        open_fight.resolved_by_id = actor.id
+        open_fight.resolution_reason = f"Техническая победа: {reason}"
+        open_fight.resolved_at = now
+        open_fight.tournament_match_id = None
+        db.flush()
+
+    match.walkover_at = now
+    match.walkover_by_id = actor.id
+    match.walkover_reason = reason
+    _record_winner(db, tournament, match, winner_id, None)
+    _recalc_if_finished(db, tournament)
+    db.commit()
+    return match
+
+
+def cancel_walkover(db: Session, match_id: int) -> TournamentMatch:
+    """Отмена технической победы: матч снова ждёт результата (если победитель ещё не играл дальше)."""
+    acquire_rating_lock(db)
+    match = _lock_match(db, select(TournamentMatch).where(TournamentMatch.id == match_id))
+    if match is None:
+        raise not_found("Матч не найден")
+    tournament = lock_tournament(db, match.tournament_id)
+    if match.walkover_at is None:
+        return match
+    if tournament.status == TournamentStatus.CANCELLED:
+        raise conflict("Турнир отменён")
+    was_finished = tournament.status == TournamentStatus.FINISHED
+    _rollback_winner(db, tournament, match)
+    match.walkover_at = None
+    match.walkover_by_id = None
+    match.walkover_reason = None
+    db.flush()
+    if was_finished:
+        _recalc_from_final(db, tournament)
+    db.commit()
+    return match
+
+
+def _final_fight(db: Session, tournament: Tournament) -> Fight | None:
+    return db.scalar(
+        select(Fight)
+        .join(TournamentMatch, TournamentMatch.id == Fight.tournament_match_id)
+        .where(
+            TournamentMatch.tournament_id == tournament.id,
+            TournamentMatch.round == tournament.rounds_count,
+            TournamentMatch.is_third_place.is_(False),
+            Fight.status == FightStatus.CONFIRMED,
+        )
+    )
+
+
+def _recalc_from_final(db: Session, tournament: Tournament) -> None:
+    """Призы турнира начисляются боем финала: пересчёт с него, когда турнир завершился или снова открылся."""
+    final = _final_fight(db, tournament)
+    if final is not None:
+        recalc.recalculate(db.connection(), (final.fought_at, final.id))
+        db.expire_all()
+
+
+def _recalc_if_finished(db: Session, tournament: Tournament) -> None:
+    if tournament.status == TournamentStatus.FINISHED:
+        _recalc_from_final(db, tournament)

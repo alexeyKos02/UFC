@@ -21,6 +21,7 @@ const TONES: Record<string, string> = {
   in_progress: 'tone-amber',
   finished: 'tone-green',
   bye: 'tone-grey',
+  walkover: 'tone-amber',
   completed: 'tone-green',
   ready: 'tone-blue',
   waiting_players: 'tone-grey',

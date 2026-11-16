@@ -67,6 +67,7 @@ export const matchStateLabel: Record<MatchState, string> = {
   completed: 'Завершён',
   ready: 'Ждёт результата',
   waiting_players: 'Ждёт соперников',
+  walkover: 'Техническая победа',
   pending: 'Ждёт подтверждения',
   disputed: 'Оспорен',
   confirmed: 'Завершён',

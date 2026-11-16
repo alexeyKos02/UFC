@@ -3,11 +3,13 @@ import { computed, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../../api'
 import Modal from '../../components/Modal.vue'
+import PlayerChip from '../../components/PlayerChip.vue'
 import StateBlock from '../../components/StateBlock.vue'
 import StatusBadge from '../../components/StatusBadge.vue'
+import WalkoverForm from '../../components/WalkoverForm.vue'
 import { useAction, useLoad } from '../../feedback'
 import { recommendedTournamentPrizes, seatsLine } from '../../format'
-import type { Belt, TournamentCard } from '../../types'
+import type { Belt, MatchOut, TournamentCard, TournamentDetail } from '../../types'
 
 const list = useLoad(() => api.get<TournamentCard[]>('/admin/tournaments'))
 const belts = useLoad(() => api.get<Belt[]>('/belts'))
@@ -80,6 +82,36 @@ async function save(): Promise<void> {
 async function act(item: TournamentCard, action: 'publish' | 'start', message: string): Promise<void> {
   await run(() => api.post(`/admin/tournaments/${item.id}/${action}`), message)
   await list.reload()
+}
+
+// Технические победы: список матчей идущего турнира, где её можно присудить или отменить.
+const walkoverTournament = ref<TournamentDetail | null>(null)
+const walkoverMatch = ref<MatchOut | null>(null)
+const walkoverMatches = computed(() =>
+  (walkoverTournament.value?.rounds ?? [])
+    .flatMap((round) => round.matches)
+    .filter((match) => match.can_walkover || match.can_cancel_walkover),
+)
+
+async function openWalkovers(item: TournamentCard): Promise<void> {
+  const detail = await run(() => api.get<TournamentDetail>(`/tournaments/${item.id}`))
+  if (detail) {
+    walkoverTournament.value = detail
+    walkoverMatch.value = null
+  }
+}
+
+async function refreshWalkovers(): Promise<void> {
+  const current = walkoverTournament.value
+  walkoverMatch.value = null
+  if (current) await openWalkovers(current)
+  await list.reload()
+}
+
+async function cancelWalkover(match: MatchOut): Promise<void> {
+  if (await run(() => api.post(`/admin/tournaments/matches/${match.id}/walkover/cancel`), 'Техническая победа отменена')) {
+    await refreshWalkovers()
+  }
 }
 
 async function cancel(): Promise<void> {
@@ -161,6 +193,7 @@ async function cancel(): Promise<void> {
               <div class="row" style="gap: 6px">
                 <button v-if="item.status === 'draft'" class="btn sm primary" :disabled="busy" @click="act(item, 'publish', 'Регистрация открыта')">Открыть регистрацию</button>
                 <button v-if="item.status === 'registration'" class="btn sm primary" :disabled="busy" @click="act(item, 'start', 'Турнир запущен, сетка создана')">Запустить</button>
+                <button v-if="item.status === 'in_progress'" class="btn sm" :disabled="busy" @click="openWalkovers(item)">Тех. победа</button>
                 <button v-if="item.status !== 'cancelled'" class="btn sm" @click="edit(item)">Изменить</button>
                 <button v-if="item.status === 'draft' || item.status === 'registration' || item.status === 'in_progress'" class="btn sm danger" @click="cancelling = item">Отменить</button>
               </div>
@@ -171,6 +204,35 @@ async function cancel(): Promise<void> {
     </div>
     <p v-else class="empty">Турниров пока нет.</p>
   </StateBlock>
+
+  <Modal
+    v-if="walkoverTournament"
+    :title="walkoverMatch ? 'Техническая победа' : `Технические победы — «${walkoverTournament.title}»`"
+    @close="walkoverTournament = null"
+  >
+    <WalkoverForm v-if="walkoverMatch" :match="walkoverMatch" @done="refreshWalkovers" />
+    <div v-else class="stack">
+      <p class="small muted">
+        Если соперник не явился, победитель проходит дальше без боя. В финале техническая победа не присуждается.
+      </p>
+      <article v-for="match in walkoverMatches" :key="match.id" class="card stack" style="gap: 8px">
+        <div class="row between">
+          <b class="small">{{ match.round_name }}</b>
+          <StatusBadge :match="match.state" />
+        </div>
+        <div class="row" style="gap: 6px 12px">
+          <PlayerChip v-if="match.player1" :player="match.player1" :size="24" />
+          <span class="muted small">—</span>
+          <PlayerChip v-if="match.player2" :player="match.player2" :size="24" />
+        </div>
+        <div class="row">
+          <button v-if="match.can_walkover" class="btn sm primary" type="button" @click="walkoverMatch = match">Присудить</button>
+          <button v-if="match.can_cancel_walkover" class="btn sm" type="button" :disabled="busy" @click="cancelWalkover(match)">Отменить тех. победу</button>
+        </div>
+      </article>
+      <p v-if="!walkoverMatches.length" class="empty">Сейчас нет матчей, где можно присудить техническую победу.</p>
+    </div>
+  </Modal>
 
   <Modal v-if="cancelling" :title="`Отменить «${cancelling.title}»`" @close="cancelling = null">
     <p class="small muted">Подтверждённые бои останутся в истории и статистике. Пояс выдан не будет, незавершённые записи закроются.</p>

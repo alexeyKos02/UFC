@@ -114,8 +114,8 @@ def tournament_prizes(connection: Connection) -> dict[int, list[tuple[int, int]]
     """Призы завершённых турниров в очки лиги: бой, завершивший турнир, -> [(игрок, очки)].
 
     1-е место — победитель финала, 2-е — проигравший в финале. 3-е — победитель матча за 3-е место,
-    а без такого матча — оба проигравших полуфиналиста. Турнир завершает последний по дате бой
-    из финала и матча за 3-е место.
+    а без такого матча — оба проигравших полуфиналиста, кроме проигравшего технически (не явился).
+    Турнир завершает последний по дате бой из финала и матча за 3-е место.
     """
     tournaments = connection.execute(
         text(
@@ -129,6 +129,7 @@ def tournament_prizes(connection: Connection) -> dict[int, list[tuple[int, int]]
     for row in connection.execute(
         text(
             "SELECT m.tournament_id, m.round, m.player1_id, m.player2_id, m.winner_id, m.is_bye, m.is_third_place, "
+            "m.walkover_at, "
             "f.id AS fight_id, f.fought_at FROM tournament_matches m "
             "LEFT JOIN fights f ON f.tournament_match_id = m.id AND f.status = 'confirmed' "
             "WHERE m.tournament_id = ANY(:ids)"
@@ -154,7 +155,7 @@ def tournament_prizes(connection: Connection) -> dict[int, list[tuple[int, int]]
             places.append((third_match.winner_id, tournament.third_points))
         else:
             semis = [m for m in rows if m.round == tournament.rounds_count - 1 and not m.is_third_place]
-            places += [(loser(m), tournament.third_points) for m in semis]
+            places += [(loser(m), tournament.third_points) for m in semis if m.walkover_at is None]
         closing = [m for m in (final, third_match) if m is not None and m.fight_id is not None]
         last = max(closing, key=lambda m: (m.fought_at, m.fight_id))
         prizes[last.fight_id] += [(player, prize) for player, prize in places if player is not None and prize]

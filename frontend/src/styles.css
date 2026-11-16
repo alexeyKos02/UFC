@@ -2758,3 +2758,49 @@ span.anum > span.anum-value {
 .is-loser {
   color: var(--text-3);
 }
+
+/* Техническая победа в карточке матча: причина и кнопки админа. */
+.match-note {
+  margin: 0;
+  padding: 0 10px 7px;
+}
+
+.match-admin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.walkover-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.walkover-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.walkover-option:has(input:checked) {
+  border-color: var(--gold);
+}
+
+.walkover-option input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+}

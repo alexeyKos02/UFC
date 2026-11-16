@@ -75,6 +75,11 @@ class CancelIn(BaseModel):
     reason: Reason
 
 
+class WalkoverIn(BaseModel):
+    winner_id: int
+    reason: Reason
+
+
 class AcceptIn(BaseModel):
     reason: Reason | None = None
 

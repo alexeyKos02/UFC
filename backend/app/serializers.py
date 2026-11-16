@@ -322,6 +322,8 @@ def match_name(match: TournamentMatch, rounds_count: int | None) -> str:
 def match_state(match: TournamentMatch) -> str:
     if match.is_bye:
         return "bye"
+    if match.walkover_at is not None and match.winner_id is not None:
+        return "walkover"
     if match.winner_id is not None:
         return "completed"
     if match.fight is not None:
@@ -344,6 +346,16 @@ def match_out(match: TournamentMatch, viewer: User) -> dict:
         "winner_id": match.winner_id,
         "is_bye": match.is_bye,
         "is_third_place": match.is_third_place,
+        # Техническая победа: соперник не явился, победителя назначил админ, боя нет.
+        "is_walkover": match.walkover_at is not None,
+        "walkover_reason": match.walkover_reason,
+        "can_walkover": viewer.is_staff
+        and tournament.status == TournamentStatus.IN_PROGRESS
+        and state in ("ready", "pending", "disputed")
+        and not (match.round == tournament.rounds_count and not match.is_third_place),
+        "can_cancel_walkover": viewer.is_staff
+        and match.walkover_at is not None
+        and tournament.status != TournamentStatus.CANCELLED,
         "state": state,
         "fight_id": match.fight.id if match.fight else None,
         "can_submit": is_player and state == "ready" and tournament.status == TournamentStatus.IN_PROGRESS,

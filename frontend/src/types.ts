@@ -6,7 +6,7 @@ export type FightMethod = 'ko_tko' | 'submission' | 'decision'
 export type TournamentStatus = 'draft' | 'registration' | 'in_progress' | 'finished' | 'cancelled'
 export type TitleFightStatus = 'scheduled' | 'completed' | 'cancelled'
 export type PromoType = 'tournament' | 'fight_announcement' | 'fighter_of_week'
-export type MatchState = 'bye' | 'completed' | 'ready' | 'waiting_players' | FightStatus
+export type MatchState = 'bye' | 'completed' | 'ready' | 'waiting_players' | 'walkover' | FightStatus
 
 export interface Account {
   id: number
@@ -233,6 +233,12 @@ export interface MatchOut {
   winner_id: number | null
   is_bye: boolean
   is_third_place: boolean
+  /** Техническая победа: соперник не явился, победителя назначил админ, боя нет. */
+  is_walkover: boolean
+  walkover_reason: string | null
+  /** Админ или владелец может присудить техническую победу (не в финале). */
+  can_walkover: boolean
+  can_cancel_walkover: boolean
   state: MatchState
   fight_id: number | null
   can_submit: boolean

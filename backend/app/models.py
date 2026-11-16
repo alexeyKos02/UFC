@@ -264,6 +264,10 @@ class TournamentMatch(Base):
     is_bye: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Матч за 3-е место: последний круг, позиция 1 (финал — позиция 0).
     is_third_place: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Техническая победа (соперник не явился): победителя назначил админ, боя нет.
+    walkover_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    walkover_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    walkover_reason: Mapped[str | None] = mapped_column(Text)
 
     tournament: Mapped[Tournament] = relationship(back_populates="matches")
     player1: Mapped[User | None] = relationship(foreign_keys=[player1_id])
