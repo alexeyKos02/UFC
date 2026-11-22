@@ -2,6 +2,7 @@
 import { reactive, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../../api'
+import BeltFightForm from '../../components/BeltFightForm.vue'
 import BeltIcon from '../../components/BeltIcon.vue'
 import Modal from '../../components/Modal.vue'
 import PlayerChip from '../../components/PlayerChip.vue'
@@ -47,10 +48,18 @@ async function savePoints(belt: Belt): Promise<void> {
 
 const awarding = ref<Belt | null>(null)
 const awardTo = ref<number | ''>('')
+// «Выдать пояс» по умолчанию — бой за пояс одной формой; без боя — запасной вариант.
+const withoutFight = ref(false)
 
 function openAward(belt: Belt): void {
   awarding.value = belt
   awardTo.value = ''
+  withoutFight.value = false
+}
+
+async function fightDone(): Promise<void> {
+  awarding.value = null
+  await list.reload()
 }
 
 async function award(): Promise<void> {
@@ -129,18 +138,25 @@ async function uploadIcon(event: Event, belt: Belt): Promise<void> {
   </StateBlock>
 
   <Modal v-if="awarding" :title="`Выдать пояс «${awarding.name}»`" @close="awarding = null">
-    <p class="small muted">
-      Пояс перейдёт игроку без боя.<template v-if="awarding.champion"> Нынешний чемпион {{ awarding.champion.nickname }} его потеряет.</template>
-    </p>
-    <form class="stack" @submit.prevent="award">
-      <label class="field">
-        Игрок
-        <select v-model.number="awardTo" required>
-          <option value="" disabled>Выберите игрока</option>
-          <option v-for="player in players.data.value" :key="player.id" :value="player.id" :disabled="player.id === awarding.champion?.id">{{ player.nickname }}</option>
-        </select>
-      </label>
-      <button class="btn primary" type="submit" :disabled="busy || awardTo === ''">Выдать</button>
-    </form>
+    <template v-if="!withoutFight">
+      <BeltFightForm :belt="awarding" :players="players.data.value ?? []" mode="record" @done="fightDone" />
+      <button class="btn sm" type="button" style="align-self: flex-start; margin-top: 12px" @click="withoutFight = true">Выдать без боя</button>
+    </template>
+    <template v-else>
+      <p class="small muted">
+        Пояс перейдёт игроку без боя, очков за пояс не будет.<template v-if="awarding.champion"> Нынешний чемпион {{ awarding.champion.nickname }} его потеряет.</template>
+      </p>
+      <form class="stack" @submit.prevent="award">
+        <label class="field">
+          Игрок
+          <select v-model.number="awardTo" required>
+            <option value="" disabled>Выберите игрока</option>
+            <option v-for="player in players.data.value" :key="player.id" :value="player.id" :disabled="player.id === awarding.champion?.id">{{ player.nickname }}</option>
+          </select>
+        </label>
+        <button class="btn primary" type="submit" :disabled="busy || awardTo === ''">Выдать без боя</button>
+        <button class="btn sm" type="button" style="align-self: flex-start" @click="withoutFight = false">Назад к бою за пояс</button>
+      </form>
+    </template>
   </Modal>
 </template>

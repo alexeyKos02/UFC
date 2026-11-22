@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import { isStaff } from '../auth'
+import BeltFightForm from '../components/BeltFightForm.vue'
 import BeltIcon from '../components/BeltIcon.vue'
 import FightResultForm from '../components/FightResultForm.vue'
 import Modal from '../components/Modal.vue'
@@ -10,7 +11,7 @@ import PlayerChip from '../components/PlayerChip.vue'
 import StateBlock from '../components/StateBlock.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { useAction, useLoad } from '../feedback'
-import { beltPointsLine, formatDate, formatDateTime, fromLocalInput } from '../format'
+import { beltPointsLine, formatDate, formatDateTime } from '../format'
 import type { BeltDetail, PlayerBrief, ResultPayload } from '../types'
 
 const props = defineProps<{ id: string }>()
@@ -27,48 +28,16 @@ const playerRecord = computed(() => {
   return fight && fight.status !== 'confirmed' ? fight : null
 })
 
-const player1 = ref<number | ''>('')
-const player2 = ref<number | ''>('')
-const scheduledAt = ref('')
 // Какая форма открыта: записать прошедший бой сразу с итогом или назначить бой заранее.
 const mode = ref<'record' | 'schedule' | null>(null)
 
 function openForm(next: 'record' | 'schedule'): void {
-  player1.value = ''
-  player2.value = ''
-  scheduledAt.value = ''
   mode.value = next
 }
 
-/** Пара для формы итога: у пояса с чемпионом первый — чемпион. */
-const pair = computed<[PlayerBrief, PlayerBrief] | null>(() => {
-  const options = players?.data.value ?? []
-  const first = champion.value ?? options.find((player) => player.id === player1.value)
-  const second = options.find((player) => player.id === player2.value)
-  return first && second && first.id !== second.id ? [first, second] : null
-})
-
-async function recordFight(payload: ResultPayload): Promise<void> {
-  if (!data.value || !pair.value) return
-  const body = { ...payload, player1_id: pair.value[0].id, player2_id: pair.value[1].id }
-  if (await run(() => api.post(`/admin/belts/${data.value!.id}/fights`, body), 'Бой за пояс записан')) {
-    mode.value = null
-    await reload()
-  }
-}
-
-async function schedule(): Promise<void> {
-  if (!data.value) return
-  const body = {
-    belt_id: data.value.id,
-    player1_id: champion.value ? champion.value.id : player1.value,
-    player2_id: player2.value,
-    scheduled_at: scheduledAt.value ? fromLocalInput(scheduledAt.value) : null,
-  }
-  if (await run(() => api.post('/admin/title-fights', body), 'Бой за пояс назначен')) {
-    mode.value = null
-    await reload()
-  }
+async function formDone(): Promise<void> {
+  mode.value = null
+  await reload()
 }
 
 const recording = ref(false)
@@ -189,49 +158,8 @@ async function cancelFight(): Promise<void> {
       </template>
     </StateBlock>
 
-    <Modal v-if="mode" :title="mode === 'record' ? `Бой за пояс «${data?.name}»` : 'Назначить бой за пояс'" @close="mode = null">
-      <div class="stack">
-        <div class="field-grid">
-          <label v-if="!champion" class="field">
-            Первый игрок
-            <select v-model.number="player1" required>
-              <option value="" disabled>Выберите игрока</option>
-              <option v-for="player in players?.data.value" :key="player.id" :value="player.id" :disabled="player.id === player2">{{ player.nickname }}</option>
-            </select>
-          </label>
-          <label v-else class="field">
-            Чемпион
-            <input :value="champion.nickname" disabled />
-          </label>
-          <label class="field">
-            {{ champion ? 'Претендент' : 'Второй игрок' }}
-            <select v-model.number="player2" required>
-              <option value="" disabled>Выберите игрока</option>
-              <option v-for="player in players?.data.value" :key="player.id" :value="player.id" :disabled="player.id === player1 || player.id === champion?.id">{{ player.nickname }}</option>
-            </select>
-          </label>
-        </div>
-        <template v-if="mode === 'record'">
-          <FightResultForm
-            v-if="pair"
-            :key="`${pair[0].id}-${pair[1].id}`"
-            :player1="pair[0]"
-            :player2="pair[1]"
-            :busy="busy"
-            submit-label="Записать и засчитать"
-            @submit="recordFight"
-          />
-          <p v-else class="small muted">Выберите {{ champion ? 'претендента' : 'обоих игроков' }} — появятся победитель, дата, способ и раунд.</p>
-        </template>
-        <form v-else class="stack" @submit.prevent="schedule">
-          <label class="field">
-            Дата и время (необязательно)
-            <input v-model="scheduledAt" type="datetime-local" />
-          </label>
-          <p class="small muted">Итог потом вносят игроки, как обычно, или админ кнопкой «Внести итог».</p>
-          <button class="btn primary" type="submit" :disabled="busy || !pair">Назначить бой</button>
-        </form>
-      </div>
+    <Modal v-if="mode && data" :title="mode === 'record' ? `Бой за пояс «${data.name}»` : 'Назначить бой за пояс'" @close="mode = null">
+      <BeltFightForm :belt="data" :players="players?.data.value ?? []" :mode="mode" @done="formDone" />
     </Modal>
 
     <Modal v-if="recording && openFight" :title="`Итог боя за пояс «${data?.name}»`" @close="recording = false">
