@@ -8,6 +8,7 @@ from app.errors import not_found
 from app.models import (
     AdjustmentStatus,
     Belt,
+    BeltWin,
     BeltKind,
     Fight,
     FightStatus,
@@ -68,6 +69,7 @@ def player_profile(player_id: int, viewer: CurrentUser, db: Db) -> dict:
         "player": {
             **player_brief(user),
             "full_body_url": image_url(user.full_body_path),
+            "full_body_cutout": user.full_body_cutout,
             "created_at": user.created_at,
         },
         "rating": {
@@ -110,11 +112,12 @@ def rating_history(player_id: int, viewer: CurrentUser, db: Db) -> dict:
         raise not_found("Игрок не найден")
     opponent = aliased(User)
     rows = db.execute(
-        select(RatingChange, Fight, opponent, Belt)
+        select(RatingChange, Fight, opponent, Belt, BeltWin)
         .join(Fight, Fight.id == RatingChange.fight_id)
         # Титульный бой и его пояс: на графике отмечаются защиты и попытки взять основной пояс.
         .outerjoin(TitleFight, TitleFight.id == Fight.title_fight_id)
         .outerjoin(Belt, Belt.id == TitleFight.belt_id)
+        .outerjoin(BeltWin, BeltWin.title_fight_id == TitleFight.id)
         # Соперник — тот из пары, чьё это не начисление.
         .join(
             opponent,
@@ -135,7 +138,17 @@ def rating_history(player_id: int, viewer: CurrentUser, db: Db) -> dict:
         }
 
     events: list[tuple[tuple, dict]] = []
-    for change, fight, rival, belt in rows:
+    def side_belt(belt: Belt | None, win: BeltWin | None) -> dict | None:
+        """Бой за неосновной пояс: что случилось с поясом у этого игрока (на графике — серебряный значок)."""
+        if belt is None or belt.kind == BeltKind.MAIN or win is None:
+            return None
+        if win.user_id == player_id:
+            mark = "defend" if win.is_defense else "take"
+        else:
+            mark = "lose" if win.previous_champion_id == player_id else "fail"
+        return {"belt": belt_brief(belt), "mark": mark}
+
+    for change, fight, rival, belt, win in rows:
         events.append(
             (
                 (fight.fought_at, fight.id, 0),
@@ -150,7 +163,7 @@ def rating_history(player_id: int, viewer: CurrentUser, db: Db) -> dict:
                     **snapshot(change),
                     # Очки за неосновной пояс в этом бою: точка та же, delta — только Elo.
                     "belt_delta": change.belt_delta,
-                    "belt": belt_brief(belt) if belt is not None and change.belt_delta else None,
+                    "side_belt": side_belt(belt, win),
                 },
             )
         )
@@ -228,4 +241,10 @@ def upload_avatar(file: UploadFile, user: CurrentUser, db: Db) -> dict:
 
 @router.post("/me/full-body")
 def upload_full_body(file: UploadFile, user: CurrentUser, db: Db) -> dict:
-    return _replace_image(db, user, "full_body_path", file, "full_body")
+    user.full_body_cutout = False
+    result = _replace_image(db, user, "full_body_path", file, "full_body")
+    if uploads.stored_is_cutout(user.full_body_path):
+        user.full_body_cutout = True
+        db.commit()
+        result = account_out(user)
+    return result

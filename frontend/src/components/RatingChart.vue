@@ -4,7 +4,7 @@ import { formatBoutDate, formatShortDate, plural, signed } from '../format'
 import type { RatingHistoryPoint } from '../types'
 import BeltMarkIcon from './BeltMarkIcon.vue'
 import PrizeCupIcon from './PrizeCupIcon.vue'
-import { beltMark, prizePlace } from '../beltMarks'
+import { SIDE_BELT_TIP, beltMark, prizePlace, sideBeltMark } from '../beltMarks'
 
 /**
  * График очков или номера в таблице по событиям игрока: бои лиги, призы за 1–3-е место
@@ -214,11 +214,17 @@ const championBands = computed(() => {
   return bands
 })
 
-/** События с основным поясом: над точкой боя рисуется значок (взял, защитил, потерял, не взял). */
+/**
+ * События с поясом: над точкой боя значок (взял, защитил, потерял, не взял). Основной пояс —
+ * золотой, неосновной — серебряный (minor).
+ */
 const beltMarks = computed(() =>
   points.value.flatMap((point, index) => {
-    const mark = point.item && inView(index) ? beltMark(point.item) : null
-    return mark ? [{ point, index, mark }] : []
+    if (!point.item || !inView(index)) return []
+    const main = beltMark(point.item)
+    if (main) return [{ point, index, mark: main, minor: false }]
+    const side = sideBeltMark(point.item)
+    return side ? [{ point, index, mark: side, minor: true }] : []
   }),
 )
 
@@ -355,6 +361,11 @@ const tooltip = computed(() => {
   return { point, left, top, below: top < 80 }
 })
 
+function tipSideClass(mark: string): string {
+  if (mark === 'lose') return 'tone-minus'
+  return mark === 'fail' ? 'muted' : 'tone-silver'
+}
+
 const tooltipMark = computed(() => (tooltip.value?.point.item ? beltMark(tooltip.value.point.item) : null))
 
 const summary = computed(() => {
@@ -438,6 +449,7 @@ const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
           v-for="item in beltMarks"
           :key="`belt-${item.index}`"
           :mark="item.mark"
+          :minor="item.minor"
           :transform="`translate(${x(item.index) - 8}, ${Math.max(y(item.point.value) - 22, 0)})`"
         />
         <PrizeCupIcon
@@ -485,11 +497,13 @@ const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
             {{ tooltip.point.item.won ? 'над' : 'от' }} {{ tooltip.point.item.opponent?.nickname }}
           </span>
           <span>{{ valueLabel(tooltip.point) }}<template v-if="mode === 'points'"> ({{ signed(tooltip.point.item.delta + (tooltip.point.item.belt_delta ?? 0)) }})</template></span>
-          <template v-if="tooltip.point.item.belt_delta">
-            <span class="small muted">Бой {{ signed(tooltip.point.item.delta) }}</span>
+          <template v-if="tooltip.point.item.side_belt">
             <span class="chart-tip-reason">
-              <b :class="tooltip.point.item.belt_delta > 0 ? 'tone-gold' : 'tone-minus'">{{ signed(tooltip.point.item.belt_delta) }}</b>
-              за пояс «{{ tooltip.point.item.belt?.name }}»
+              <b :class="tipSideClass(tooltip.point.item.side_belt.mark)">{{ SIDE_BELT_TIP[tooltip.point.item.side_belt.mark] }}</b>
+              «{{ tooltip.point.item.side_belt.belt.name }}»
+            </span>
+            <span v-if="tooltip.point.item.belt_delta" class="small muted">
+              Бой {{ signed(tooltip.point.item.delta) }}, за пояс {{ signed(tooltip.point.item.belt_delta) }}
             </span>
           </template>
           <span v-if="tooltipMark === 'take'" class="tone-gold">Завоевал пояс чемпиона</span>

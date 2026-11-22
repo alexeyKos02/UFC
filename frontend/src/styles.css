@@ -1239,6 +1239,23 @@ th.num {
   position: relative;
 }
 
+/* Фото с прозрачным фоном: без рамки и подложки, фигура стоит прямо на странице и занимает больше места. */
+.profile-top.has-cutout {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.full-body.cutout {
+  aspect-ratio: auto;
+  height: auto;
+  max-height: 560px;
+  object-fit: contain;
+  object-position: bottom center;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.5));
+}
+
 .photo-crown {
   position: absolute;
   top: 10px;
@@ -1793,6 +1810,16 @@ th.num {
   fill: var(--red);
 }
 
+/* Неосновной пояс: серебряные корона и щит; потеря — серебряная корона с красной чертой. */
+.belt-mark.minor .belt-mark-fill,
+.belt-mark.minor.lose .belt-mark-fill {
+  fill: var(--prize-silver);
+}
+
+.tone-silver {
+  color: var(--prize-silver);
+}
+
 .belt-mark.fail .belt-mark-fill {
   fill: none;
   stroke: var(--text-3);
@@ -2317,6 +2344,14 @@ th.num {
     width: 100%;
     max-width: 240px;
     margin: 0 auto;
+  }
+
+  .photo-wrap.cutout {
+    max-width: 300px;
+  }
+
+  .profile-top.has-cutout {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .bout-main {

@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import { setAccount } from '../auth'
-import { BELT_MARK_LABELS, BELT_MARK_ORDER, PRIZE_LABELS, PRIZE_ORDER, beltMark, prizePlace } from '../beltMarks'
+import { BELT_MARK_LABELS, BELT_MARK_ORDER, PRIZE_LABELS, PRIZE_ORDER, SIDE_BELT_MARK_LABELS, beltMark, prizePlace, sideBeltMark } from '../beltMarks'
 import AnimatedNumber from '../components/AnimatedNumber.vue'
 import BeltIcon from '../components/BeltIcon.vue'
 import BeltMarkIcon from '../components/BeltMarkIcon.vue'
@@ -28,6 +28,9 @@ const { data, error, loading, reload } = useLoad(() => api.get<PlayerProfile>(`/
 const history = useLoad(() => api.get<FightBrief[]>(`/players/${props.id}/fights`))
 const visibleFights = ref(HISTORY_PAGE)
 
+// Фото с прозрачным фоном встраивается в страницу: без рамки и крупнее.
+const cutout = computed(() => Boolean(data.value?.player.full_body_url && data.value.player.full_body_cutout))
+
 const ratingHistory = useLoad(() => api.get<{ points: RatingHistoryPoint[] }>(`/players/${props.id}/rating-history`))
 const chartMode = ref<'points' | 'place'>('points')
 const chartPeriod = ref<'month' | 'all'>('all')
@@ -42,6 +45,10 @@ const chartHistory = computed(() => {
 const chartHasChampion = computed(() => chartHistory.value.some((item) => item.champion_after || item.champion_before))
 const chartBeltMarks = computed(() => {
   const present = new Set(chartHistory.value.map(beltMark))
+  return BELT_MARK_ORDER.filter((mark) => present.has(mark))
+})
+const chartSideMarks = computed(() => {
+  const present = new Set(chartHistory.value.map(sideBeltMark))
   return BELT_MARK_ORDER.filter((mark) => present.has(mark))
 })
 const chartPrizes = computed(() => {
@@ -122,10 +129,10 @@ async function upload(event: Event, path: string): Promise<void> {
   <main class="container page">
     <StateBlock :loading="loading" :error="error" skeleton="profile">
       <template v-if="data">
-        <div class="profile-top">
-          <div class="photo-wrap">
+        <div class="profile-top" :class="{ 'has-cutout': cutout }">
+          <div class="photo-wrap" :class="{ cutout }">
             <span v-if="data.rating.is_champion" class="photo-crown"><ChampionMark :size="26" /></span>
-            <img v-if="data.player.full_body_url" class="full-body" :src="data.player.full_body_url" :alt="`${data.player.nickname} в полный рост`" />
+            <img v-if="data.player.full_body_url" class="full-body" :class="{ cutout }" :src="data.player.full_body_url" :alt="`${data.player.nickname} в полный рост`" />
             <svg v-else class="full-body" viewBox="0 0 120 200" role="img" aria-label="Фото в полный рост не загружено">
               <rect width="120" height="200" fill="#17191e" />
               <g fill="#3a3f4a">
@@ -272,13 +279,17 @@ async function upload(event: Event, path: string): Promise<void> {
             </div>
             <RatingChart v-if="chartHistory.length" :history="chartHistory" :mode="chartMode" />
             <p v-else class="small muted">За последние 30 дней очки не менялись.</p>
-            <div v-if="chartHasChampion || chartBeltMarks.length || chartPrizes.length || chartHasGrants" class="chart-legend small muted">
+            <div v-if="chartHasChampion || chartBeltMarks.length || chartSideMarks.length || chartPrizes.length || chartHasGrants" class="chart-legend small muted">
               <span v-if="chartHasChampion" class="chart-legend-item">
                 <span class="chart-legend-champion" aria-hidden="true"></span>с поясом чемпиона
               </span>
               <span v-for="mark in chartBeltMarks" :key="mark" class="chart-legend-item">
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><BeltMarkIcon :mark="mark" /></svg>
                 {{ BELT_MARK_LABELS[mark] }}
+              </span>
+              <span v-for="mark in chartSideMarks" :key="`side-${mark}`" class="chart-legend-item">
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><BeltMarkIcon :mark="mark" minor /></svg>
+                {{ SIDE_BELT_MARK_LABELS[mark] }}
               </span>
               <span v-for="place in chartPrizes" :key="`prize-${place}`" class="chart-legend-item">
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><PrizeCupIcon :place="place" /></svg>

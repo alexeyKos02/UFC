@@ -311,7 +311,9 @@ def test_record_belt_fight_in_one_form_gives_belt_points(admin, players):
     assert fight["points_change"] == [winner["delta"] + 30, loser["delta"]]
     assert a.get(f"/belts/{belt['id']}").json()["champion"]["id"] == a.id
     point = history(a, a)[-1]
-    assert point["event"] == "fight" and point["belt_delta"] == 30 and point["belt"]["id"] == belt["id"]
+    assert point["event"] == "fight" and point["belt_delta"] == 30
+    assert point["side_belt"] == {"belt": {**point["side_belt"]["belt"], "id": belt["id"]}, "mark": "take"}
+    assert history(b, b)[-1]["side_belt"]["mark"] == "fail"
 
 
 def test_champion_losing_belt_loses_belt_points_and_defense_gives_half(admin, players):
@@ -324,6 +326,8 @@ def test_champion_losing_belt_loses_belt_points_and_defense_gives_half(admin, pl
     # Потеря: новый чемпион +30, прежний −30.
     loss = record_belt_fight(admin, belt, c, c).json()
     assert (change(loss, c)["belt_delta"], change(loss, a)["belt_delta"]) == (30, -30)
+    marks = [item["side_belt"]["mark"] for item in history(a, a) if item.get("side_belt")]
+    assert marks == ["defend", "lose"]
     assert change(loss, a)["points_after"] == change(loss, a)["points_before"] + change(loss, a)["delta"] - 30
     assert a.points() == change(loss, a)["points_after"]
 
@@ -381,3 +385,44 @@ def test_record_belt_fight_validation(admin, players):
     admin.post("/admin/title-fights", {"belt_id": belt["id"], "player1_id": a.id, "player2_id": b.id})
     assert record_belt_fight(admin, belt, c, c, player1=a).status_code == 409
     assert b.post(f"/admin/belts/{belt['id']}/fights", {**result_body(b.id), "player2_id": b.id}).status_code == 403
+
+
+def test_side_belt_marked_in_history_even_without_points(admin, players):
+    a, b = players(2)
+    belt = belt_with_points(admin, 0, "Пояс без очков")
+    record_belt_fight(admin, belt, b, a, player1=a)
+    point = history(a, a)[-1]
+    assert point["belt_delta"] == 0
+    assert point["side_belt"]["mark"] == "take" and point["side_belt"]["belt"]["id"] == belt["id"]
+    # Основной пояс отмечается по-прежнему через champion_*, без side_belt.
+    play(a, b, b)
+    assert history(a, a)[-1]["side_belt"] is None
+
+
+# Фото в полный рост с прозрачным фоном
+
+
+def _image_bytes(mode: str, color, fmt: str = "PNG", figure: bool = True) -> bytes:
+    import io
+
+    from PIL import Image, ImageDraw
+
+    image = Image.new(mode, (60, 100), color)
+    if figure:
+        ImageDraw.Draw(image).rectangle((20, 10, 40, 99), fill=(200, 200, 200, 255)[: len(mode)])
+    buffer = io.BytesIO()
+    image.save(buffer, format=fmt)
+    return buffer.getvalue()
+
+
+def test_full_body_with_transparent_background_is_marked_cutout(players):
+    a, b = players(2)
+    cutout = a.post("/me/full-body", files={"file": ("cut.png", _image_bytes("RGBA", (0, 0, 0, 0)), "image/png")})
+    assert cutout.status_code == 200, cutout.text
+    assert cutout.json()["full_body_cutout"] is True
+    assert b.get(f"/players/{a.id}").json()["player"]["full_body_cutout"] is True
+    # Обычное фото (непрозрачный фон, в том числе PNG с альфа-каналом без прозрачности) — с рамкой.
+    opaque = a.post("/me/full-body", files={"file": ("o.png", _image_bytes("RGBA", (30, 30, 30, 255)), "image/png")})
+    assert opaque.json()["full_body_cutout"] is False
+    jpeg = b.post("/me/full-body", files={"file": ("j.jpg", _image_bytes("RGB", (30, 30, 30), "JPEG"), "image/jpeg")})
+    assert jpeg.json()["full_body_cutout"] is False

@@ -28,6 +28,29 @@ export const SHIELD_PATH = 'M8 0.5 L15 3.5 V8 C15 12 11.5 14.5 8 16 C4.5 14.5 1 
 export const SHIELD_CHECK_PATH = 'M4.8 8.2 L7 10.4 L11.3 5.6'
 export const CROWN_SLASH_PATH = 'M1 15.5 L15 0.5'
 
+/**
+ * Неосновной пояс: серебряные корона и щит над точкой боя (основной — золотые).
+ * Неудачная попытка взять неосновной пояс значком не отмечается, только в подсказке.
+ */
+export function sideBeltMark(item: RatingHistoryPoint): BeltMark | null {
+  const mark = item.event === 'fight' ? item.side_belt?.mark : undefined
+  return mark && mark !== 'fail' ? mark : null
+}
+
+export const SIDE_BELT_MARK_LABELS: Record<BeltMark, string> = {
+  take: 'взял пояс (не основной)',
+  defend: 'защитил пояс (не основной)',
+  lose: 'потерял пояс (не основной)',
+  fail: 'не взял пояс (не основной)',
+}
+
+export const SIDE_BELT_TIP: Record<BeltMark, string> = {
+  take: 'Взял пояс',
+  defend: 'Защитил пояс',
+  lose: 'Потерял пояс',
+  fail: 'Не взял пояс',
+}
+
 /** Место в турнире, за которое начислен приз: кубок с цифрой над точкой графика. */
 export type PrizePlace = 1 | 2 | 3
 

@@ -16,6 +16,8 @@ export interface Account {
   status: 'active' | 'blocked'
   avatar_url: string | null
   full_body_url: string | null
+  /** Фото в полный рост с прозрачным фоном: в профиле без рамки и крупнее. */
+  full_body_cutout: boolean
   rating_points: number
   /** Прошёл или пропустил знакомство с сайтом. */
   onboarded: boolean
@@ -347,7 +349,7 @@ export interface PlayerStats {
 }
 
 export interface PlayerProfile {
-  player: PlayerBrief & { full_body_url: string | null; created_at: string }
+  player: PlayerBrief & { full_body_url: string | null; full_body_cutout: boolean; created_at: string }
   rating: {
     points: number
     display_place: number | null
@@ -470,7 +472,8 @@ export interface RatingHistoryPoint {
   main_title_fight?: boolean
   /** Очки за неосновной пояс в этом бою; delta — только Elo, points_after включает пояс. */
   belt_delta?: number
-  belt?: BeltBrief | null
+  /** Бой за неосновной пояс: что случилось с поясом у этого игрока. Основной — через champion_*. */
+  side_belt?: { belt: BeltBrief; mark: 'take' | 'defend' | 'lose' | 'fail' } | null
   tournament?: { id: number; title: string }
   /** Место в турнире: 1, 2 или 3. */
   tournament_place?: 1 | 2 | 3

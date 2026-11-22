@@ -64,6 +64,36 @@ def save_image(upload: UploadFile, folder: str) -> str:
     return relative_path
 
 
+# Фон считается прозрачным, если по верхнему, левому и правому краю картинки прозрачна
+# большая часть точек: вырезанная фигура края не касается (кроме ног снизу).
+CUTOUT_ALPHA = 32
+CUTOUT_EDGE_SHARE = 0.6
+
+
+def is_cutout(image: Image.Image) -> bool:
+    if "A" not in image.getbands() and "transparency" not in image.info:
+        return False
+    alpha = image.convert("RGBA").getchannel("A")
+    width, height = alpha.size
+    step_x = max(1, width // 200)
+    step_y = max(1, height // 200)
+    edge = [alpha.getpixel((x, 0)) for x in range(0, width, step_x)]
+    edge += [alpha.getpixel((0, y)) for y in range(0, height, step_y)]
+    edge += [alpha.getpixel((width - 1, y)) for y in range(0, height, step_y)]
+    return sum(1 for value in edge if value < CUTOUT_ALPHA) >= CUTOUT_EDGE_SHARE * len(edge)
+
+
+def stored_is_cutout(relative_path: str | None) -> bool:
+    """Проверка уже сохранённого файла; нет файла или он не читается — не вырезанная фигура."""
+    if not relative_path:
+        return False
+    try:
+        with Image.open(settings.upload_dir / relative_path) as image:
+            return is_cutout(image)
+    except (OSError, ValueError):
+        return False
+
+
 def delete_image(relative_path: str | None) -> None:
     if relative_path:
         (settings.upload_dir / relative_path).unlink(missing_ok=True)

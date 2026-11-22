@@ -2,14 +2,15 @@
 import { CROWN_PATH, CROWN_SLASH_PATH, SHIELD_CHECK_PATH, SHIELD_PATH, type BeltMark } from '../beltMarks'
 
 /**
- * Значок события с основным поясом в квадрате 16×16 — группа SVG.
+ * Значок события с поясом в квадрате 16×16 — группа SVG. Основной пояс — золотой,
+ * неосновной (minor) — серебряный.
  * На графике ставится через transform, в легенде — внутри своего <svg viewBox="0 0 16 16">.
  */
-defineProps<{ mark: BeltMark }>()
+defineProps<{ mark: BeltMark; minor?: boolean }>()
 </script>
 
 <template>
-  <g class="belt-mark" :class="mark">
+  <g class="belt-mark" :class="[mark, { minor }]">
     <template v-if="mark === 'defend'">
       <path class="belt-mark-fill" :d="SHIELD_PATH" />
       <path class="belt-mark-cut" :d="SHIELD_CHECK_PATH" />

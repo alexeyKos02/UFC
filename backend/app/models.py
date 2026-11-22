@@ -142,6 +142,8 @@ class User(Base):
     nickname: Mapped[str] = mapped_column(String(32))
     avatar_path: Mapped[str | None] = mapped_column(String(255))
     full_body_path: Mapped[str | None] = mapped_column(String(255))
+    # Фото в полный рост с прозрачным фоном (вырезанная фигура): показывается без рамки и крупнее.
+    full_body_cutout: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     rating_points: Mapped[int] = mapped_column(Integer, default=1000, server_default="1000")
     # Когда игрок прошёл или пропустил знакомство с сайтом. Пусто — покажем его при входе.
     onboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
