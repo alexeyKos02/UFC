@@ -1816,6 +1816,13 @@ th.num {
   fill: var(--prize-silver);
 }
 
+/* Не взял неосновной пояс: серебряный пунктирный контур (у основного — серый сплошной). */
+.belt-mark.minor.fail .belt-mark-fill {
+  fill: none;
+  stroke: var(--prize-silver);
+  stroke-dasharray: 2 1.4;
+}
+
 .tone-silver {
   color: var(--prize-silver);
 }

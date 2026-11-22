@@ -30,11 +30,10 @@ export const CROWN_SLASH_PATH = 'M1 15.5 L15 0.5'
 
 /**
  * Неосновной пояс: серебряные корона и щит над точкой боя (основной — золотые).
- * Неудачная попытка взять неосновной пояс значком не отмечается, только в подсказке.
+ * Неудачная попытка взять его — серебряная пунктирная контурная корона.
  */
 export function sideBeltMark(item: RatingHistoryPoint): BeltMark | null {
-  const mark = item.event === 'fight' ? item.side_belt?.mark : undefined
-  return mark && mark !== 'fail' ? mark : null
+  return item.event === 'fight' ? (item.side_belt?.mark ?? null) : null
 }
 
 export const SIDE_BELT_MARK_LABELS: Record<BeltMark, string> = {
