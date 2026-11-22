@@ -110,7 +110,7 @@ def rating_history(player_id: int, viewer: CurrentUser, db: Db) -> dict:
         raise not_found("Игрок не найден")
     opponent = aliased(User)
     rows = db.execute(
-        select(RatingChange, Fight, opponent, Belt.kind)
+        select(RatingChange, Fight, opponent, Belt)
         .join(Fight, Fight.id == RatingChange.fight_id)
         # Титульный бой и его пояс: на графике отмечаются защиты и попытки взять основной пояс.
         .outerjoin(TitleFight, TitleFight.id == Fight.title_fight_id)
@@ -135,7 +135,7 @@ def rating_history(player_id: int, viewer: CurrentUser, db: Db) -> dict:
         }
 
     events: list[tuple[tuple, dict]] = []
-    for change, fight, rival, belt_kind in rows:
+    for change, fight, rival, belt in rows:
         events.append(
             (
                 (fight.fought_at, fight.id, 0),
@@ -146,8 +146,11 @@ def rating_history(player_id: int, viewer: CurrentUser, db: Db) -> dict:
                     "fought_at": fight.fought_at,
                     "won": fight.winner_id == player_id,
                     "opponent": player_brief(rival),
-                    "main_title_fight": belt_kind == BeltKind.MAIN,
+                    "main_title_fight": belt is not None and belt.kind == BeltKind.MAIN,
                     **snapshot(change),
+                    # Очки за неосновной пояс в этом бою: точка та же, delta — только Elo.
+                    "belt_delta": change.belt_delta,
+                    "belt": belt_brief(belt) if belt is not None and change.belt_delta else None,
                 },
             )
         )

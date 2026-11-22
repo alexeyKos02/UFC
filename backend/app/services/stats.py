@@ -142,7 +142,7 @@ def head_to_head(db: Session, me_id: int, rival_id: int) -> dict:
     points = 0
     if fight_ids:
         points += db.scalar(
-            select(func.coalesce(func.sum(RatingChange.delta), 0)).where(
+            select(func.coalesce(func.sum(RatingChange.delta + RatingChange.belt_delta), 0)).where(
                 RatingChange.fight_id.in_(fight_ids), RatingChange.player_id == me_id
             )
         )

@@ -86,6 +86,8 @@ class AcceptIn(BaseModel):
 
 class BeltIn(BaseModel):
     name: BeltName
+    # Очки за неосновной пояс, взятый в бою. Не передано — сумма не меняется.
+    title_points: int | None = Field(default=None, ge=0, le=1000)
 
 
 class BeltAwardIn(BaseModel):
@@ -119,6 +121,13 @@ class PointGrantIn(BaseModel):
 
 class TitleResultIn(FightResultIn):
     reason: Reason | None = None
+
+
+class BeltFightIn(TitleResultIn):
+    """Бой за пояс одной формой: пара и итог. У пояса с чемпионом первый игрок — чемпион."""
+
+    player1_id: int | None = None
+    player2_id: int
 
 
 class AdjustmentCancelIn(BaseModel):

@@ -273,3 +273,111 @@ def test_player_cannot_record_belt_fight_result_as_admin(admin, players):
     ).json()
     assert a.post(f"/admin/title-fights/{title_fight['id']}/result", result_body(a.id)).status_code == 403
     assert admin.post("/admin/title-fights/999999/result", result_body(a.id)).status_code == 404
+
+
+# Очки за неосновной пояс, взятый в бою
+
+
+def belt_with_points(admin, points: int = 30, name: str = "Пояс средневесов") -> dict:
+    response = admin.post("/admin/belts", {"name": name, "title_points": points})
+    assert response.status_code == 201, response.text
+    assert response.json()["title_points"] == points
+    return response.json()
+
+
+def record_belt_fight(admin, belt: dict, player2, winner, player1=None, **extra):
+    body = {**result_body(winner.id), "player2_id": player2.id, **extra}
+    if player1 is not None:
+        body["player1_id"] = player1.id
+    return admin.post(f"/admin/belts/{belt['id']}/fights", body)
+
+
+def change(fight: dict, player) -> dict:
+    return next(item for item in fight["rating_changes"] if item["player"]["id"] == player.id)
+
+
+def test_record_belt_fight_in_one_form_gives_belt_points(admin, players):
+    a, b = players(2)
+    belt = belt_with_points(admin, 30)
+    response = record_belt_fight(admin, belt, b, a, player1=a, method="ko_tko", round=1)
+    assert response.status_code == 201, response.text
+    fight = response.json()
+    assert fight["status"] == "confirmed" and fight["kind"] == "title"
+    winner, loser = change(fight, a), change(fight, b)
+    # Вакантный пояс: победитель +30 сверх Elo, проигравший пояса не терял — без штрафа.
+    assert (winner["belt_delta"], loser["belt_delta"]) == (30, 0)
+    assert winner["points_after"] == winner["points_before"] + winner["delta"] + 30
+    assert a.points() == winner["points_after"]
+    assert fight["points_change"] == [winner["delta"] + 30, loser["delta"]]
+    assert a.get(f"/belts/{belt['id']}").json()["champion"]["id"] == a.id
+    point = history(a, a)[-1]
+    assert point["event"] == "fight" and point["belt_delta"] == 30 and point["belt"]["id"] == belt["id"]
+
+
+def test_champion_losing_belt_loses_belt_points_and_defense_gives_half(admin, players):
+    a, b, c = players(3)
+    belt = belt_with_points(admin, 30)
+    admin.post(f"/admin/belts/{belt['id']}/award", {"player_id": a.id})
+    # Защита: чемпион +15 сверх Elo, претендент без штрафа за пояс.
+    defense = record_belt_fight(admin, belt, b, a).json()
+    assert (change(defense, a)["belt_delta"], change(defense, b)["belt_delta"]) == (15, 0)
+    # Потеря: новый чемпион +30, прежний −30.
+    loss = record_belt_fight(admin, belt, c, c).json()
+    assert (change(loss, c)["belt_delta"], change(loss, a)["belt_delta"]) == (30, -30)
+    assert change(loss, a)["points_after"] == change(loss, a)["points_before"] + change(loss, a)["delta"] - 30
+    assert a.points() == change(loss, a)["points_after"]
+
+
+def test_belt_points_are_fixed_when_fight_is_confirmed(admin, players):
+    a, b = players(2)
+    belt = belt_with_points(admin, 30)
+    fight = record_belt_fight(admin, belt, b, a, player1=a).json()
+    before = a.points()
+    assert admin.patch(f"/admin/belts/{belt['id']}", {"name": belt["name"], "title_points": 80}).status_code == 200
+    with engine.begin() as connection:
+        recalc.recalculate(connection)
+    assert a.points() == before
+    assert change(a.get(f"/fights/{fight['id']}").json(), a)["belt_delta"] == 30
+
+
+def test_belt_points_survive_full_recalculation_and_vanish_on_delete(admin, players):
+    a, b, c = players(3)
+    belt = belt_with_points(admin, 40)
+    play(a, c, a)
+    fight = record_belt_fight(admin, belt, b, b, player1=a).json()
+    play(b, c, c)
+    live = stored()
+    with engine.begin() as connection:
+        recalc.recalculate(connection)
+    assert stored() == live
+    deleted = admin.post(f"/admin/fights/{fight['id']}/delete", {"reason": "Ошибка"})
+    assert deleted.status_code == 200, deleted.text
+    with engine.begin() as connection:
+        recalc.recalculate(connection)
+    assert all(item.get("belt_delta", 0) == 0 for item in history(b, b))
+    assert a.get(f"/belts/{belt['id']}").json()["champion"] is None
+
+
+def test_no_belt_points_for_main_belt_tournament_or_manual_award(admin, players):
+    apis = players(4)
+    main = next(belt for belt in admin.get("/belts").json() if belt["kind"] == "main")
+    assert admin.patch(f"/admin/belts/{main['id']}", {"name": main["name"], "title_points": 30}).status_code == 400
+    belt = belt_with_points(admin, 30, "Турнирный пояс")
+    tournament = new_tournament(admin, capacity=4, belt=belt, win_points=0)
+    run_tournament_start(admin, tournament["id"], apis)
+    finish_tournament(admin, apis, tournament["id"])
+    admin.post(f"/admin/belts/{belt['id']}/award", {"player_id": apis[3].id})
+    with SessionLocal() as db:
+        from app.models import RatingChange
+
+        assert db.scalar(select(RatingChange.id).where(RatingChange.belt_delta != 0)) is None
+
+
+def test_record_belt_fight_validation(admin, players):
+    a, b, c = players(3)
+    belt = belt_with_points(admin, 30)
+    assert record_belt_fight(admin, belt, b, c, player1=a).status_code == 400
+    assert record_belt_fight(admin, belt, b, b).status_code == 400  # вакантный: нужен первый игрок
+    admin.post("/admin/title-fights", {"belt_id": belt["id"], "player1_id": a.id, "player2_id": b.id})
+    assert record_belt_fight(admin, belt, c, c, player1=a).status_code == 409
+    assert b.post(f"/admin/belts/{belt['id']}/fights", {**result_body(b.id), "player2_id": b.id}).status_code == 403

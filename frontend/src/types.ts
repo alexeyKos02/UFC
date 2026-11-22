@@ -46,6 +46,8 @@ export interface BeltBrief {
 
 export interface Belt extends BeltBrief {
   champion: PlayerBrief | null
+  /** Очки за неосновной пояс, взятый в бою: взял +N, чемпион, проигравший пояс, −N, защита +N/2. */
+  title_points: number
 }
 
 export interface LinkRef {
@@ -168,6 +170,8 @@ export interface RatingChange {
   delta: number
   /** Только у проигравшего: на сколько меньше он потерял благодаря скидке за активность. */
   loss_discount: number
+  /** Очки за неосновной пояс в этом бою (сверх Elo); points_after их уже включает. */
+  belt_delta: number
   points_after: number
   place_after: number
   /** Номер в таблице рейтинга до и после боя. У чемпиона номера нет: null и champion_* = true. */
@@ -464,6 +468,9 @@ export interface RatingHistoryPoint {
   champion_after: boolean
   /** Титульный бой за основной пояс: по нему отмечаются защиты и неудачные попытки. */
   main_title_fight?: boolean
+  /** Очки за неосновной пояс в этом бою; delta — только Elo, points_after включает пояс. */
+  belt_delta?: number
+  belt?: BeltBrief | null
   tournament?: { id: number; title: string }
   /** Место в турнире: 1, 2 или 3. */
   tournament_place?: 1 | 2 | 3

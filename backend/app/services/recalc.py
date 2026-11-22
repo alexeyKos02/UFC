@@ -164,6 +164,33 @@ def tournament_prizes(connection: Connection) -> dict[int, list[tuple[int, int, 
     return prizes
 
 
+def belt_bonuses(connection: Connection) -> dict[int, dict[int, int]]:
+    """Очки за неосновной пояс в бою за пояс: бой -> {игрок: очки}.
+
+    Сумма N берётся из title_fights.belt_points (запомнена при подтверждении). Взял пояс +N,
+    чемпион, проигравший пояс в этом бою, −N; защита пояса +N/2 (с округлением). Претендент,
+    не взявший пояс, и пояса из турниров и выданные без боя очков не дают.
+    """
+    bonuses: dict[int, dict[int, int]] = {}
+    for row in connection.execute(
+        text(
+            "SELECT w.fight_id, w.user_id, w.previous_champion_id, w.is_defense, t.belt_points, "
+            "f.loser_id FROM belt_wins w JOIN belts b ON b.id = w.belt_id "
+            "JOIN title_fights t ON t.id = w.title_fight_id JOIN fights f ON f.id = w.fight_id "
+            "WHERE b.kind <> 'main' AND w.fight_id IS NOT NULL AND t.belt_points > 0"
+        )
+    ):
+        points = row.belt_points
+        if row.is_defense:
+            bonuses[row.fight_id] = {row.user_id: _round(points / 2)}
+            continue
+        bonus = {row.user_id: points}
+        if row.previous_champion_id is not None and row.previous_champion_id == row.loser_id:
+            bonus[row.loser_id] = -points
+        bonuses[row.fight_id] = bonus
+    return bonuses
+
+
 def _places_columns(table_before: dict, table_after: dict, player: int) -> dict:
     return {
         "table_place_before": table_before.get(player, (None, False))[0],
@@ -229,7 +256,7 @@ def recalculate(
     existing = {
         (row.fight_id, row.player_id): row
         for row in connection.execute(
-            text("SELECT id, fight_id, player_id, delta, points_before FROM rating_changes")
+            text("SELECT * FROM rating_changes")
         )
     }
     fight_belt = dict(
@@ -241,6 +268,14 @@ def recalculate(
         ).all()
     )
     fight_prize = tournament_prizes(connection)
+    # Колонки из 0015: миграции 0012 и 0014 вызывают этот модуль раньше, чем они появились.
+    has_belt_points = connection.execute(
+        text(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'rating_changes' AND column_name = 'belt_delta')"
+        )
+    ).scalar()
+    fight_belt_bonus = belt_bonuses(connection) if has_belt_points else {}
 
     events = [(row.created_at, 0, row.id, "user", row) for row in users]
     for row in connection.execute(
@@ -388,6 +423,9 @@ def recalculate(
         h2h.add(winner, loser, row.method)
         if row.id in fight_belt:
             champion = fight_belt[row.id]
+        bonus = fight_belt_bonus.get(row.id, {})
+        for player, amount in bonus.items():
+            points[player] += amount
 
         if not tracked:
             continue
@@ -400,8 +438,9 @@ def recalculate(
                 "points_before": before[player],
                 "delta": delta,
                 "loss_discount": discount,
-                # Очки «после» — сразу после боя, без приза турнира: приз виден в очках игрока.
-                "points_after": before[player] + delta,
+                "belt_delta": bonus.get(player, 0),
+                # Очки «после» — сразу после боя, с очками за неосновной пояс.
+                "points_after": before[player] + delta + bonus.get(player, 0),
                 "place_after": points_after_place.get(player, 0),
                 "table_place_before": table_before.get(player, (None, False))[0],
                 "champion_before": table_before.get(player, (None, False))[1],
@@ -413,7 +452,11 @@ def recalculate(
                 inserts.append({**values, "created_at": moment})
             else:
                 writes.append(values)
-                if row.id != trigger_fight_id and (old.delta != delta or old.points_before != before[player]):
+                if row.id != trigger_fight_id and (
+                    old.delta != delta
+                    or old.points_before != before[player]
+                    or (has_belt_points and old.belt_delta != bonus.get(player, 0))
+                ):
                     changed_fights.add(row.id)
 
     columns = (
@@ -421,6 +464,7 @@ def recalculate(
         "loss_discount = :loss_discount, points_after = :points_after, place_after = :place_after, "
         "table_place_before = :table_place_before, champion_before = :champion_before, "
         "table_place_after = :table_place_after, champion_after = :champion_after"
+        + (", belt_delta = :belt_delta" if has_belt_points else "")
     )
     if writes:
         connection.execute(
@@ -432,9 +476,11 @@ def recalculate(
             text(
                 "INSERT INTO rating_changes (fight_id, player_id, place_before, points_before, delta, "
                 "loss_discount, points_after, place_after, table_place_before, champion_before, "
-                "table_place_after, champion_after, created_at) VALUES (:fight_id, :player_id, :place_before, "
+                f"table_place_after, champion_after, created_at{', belt_delta' if has_belt_points else ''}) "
+                "VALUES (:fight_id, :player_id, :place_before, "
                 ":points_before, :delta, :loss_discount, :points_after, :place_after, :table_place_before, "
-                ":champion_before, :table_place_after, :champion_after, :created_at)"
+                f":champion_before, :table_place_after, :champion_after, :created_at"
+                f"{', :belt_delta' if has_belt_points else ''})"
             ),
             inserts,
         )

@@ -60,7 +60,7 @@ def belt_brief(belt: Belt) -> dict:
 
 
 def belt_out(belt: Belt) -> dict:
-    return {**belt_brief(belt), "champion": player_brief(belt.current_champion)}
+    return {**belt_brief(belt), "champion": player_brief(belt.current_champion), "title_points": belt.title_points}
 
 
 def _belt_win_out(win: BeltWin) -> dict:
@@ -137,7 +137,7 @@ def _fighter_out(user: User) -> dict:
 
 
 def _points_change(fight: Fight) -> list[int] | None:
-    """Итог очков за бой с учётом ручной корректировки, в порядке player1, player2."""
+    """Итог очков за бой с очками за пояс и ручной корректировкой, в порядке player1, player2."""
     if not fight.rating_changes:
         return None
     adjustment = _adjustment_out(fight.adjustment)
@@ -146,7 +146,7 @@ def _points_change(fight: Fight) -> list[int] | None:
         manual = 0
         if adjustment:
             manual = adjustment["winner_delta"] if change.player_id == fight.winner_id else adjustment["loser_delta"]
-        totals[change.player_id] = change.delta + manual
+        totals[change.player_id] = change.delta + change.belt_delta + manual
     return [totals[fight.player1_id], totals[fight.player2_id]]
 
 
@@ -219,6 +219,7 @@ def _rating_change_out(change) -> dict:
         "points_before": change.points_before,
         "delta": change.delta,
         "loss_discount": change.loss_discount,
+        "belt_delta": change.belt_delta,
         "points_after": change.points_after,
         "place_after": change.place_after,
         "table_place_before": change.table_place_before,

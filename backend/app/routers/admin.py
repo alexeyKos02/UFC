@@ -6,7 +6,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import aliased
 
 from app.deps import Db, OwnerUser, StaffUser, require_staff
-from app.errors import not_found
+from app.errors import bad_request, not_found
 from app.models import (
     Belt,
     BeltKind,
@@ -28,6 +28,7 @@ from app.schemas import (
     AdjustmentCancelIn,
     AdjustmentIn,
     BeltAwardIn,
+    BeltFightIn,
     BeltIn,
     CancelIn,
     PointGrantIn,
@@ -221,7 +222,7 @@ def _belt_or_404(db: Db, belt_id: int) -> Belt:
 
 @router.post("/belts", status_code=status.HTTP_201_CREATED)
 def create_belt(body: BeltIn, db: Db) -> dict:
-    belt = Belt(kind=BeltKind.TOURNAMENT, name=body.name)
+    belt = Belt(kind=BeltKind.TOURNAMENT, name=body.name, title_points=body.title_points or 0)
     db.add(belt)
     db.commit()
     return belt_out(belt)
@@ -231,6 +232,10 @@ def create_belt(body: BeltIn, db: Db) -> dict:
 def update_belt(belt_id: int, body: BeltIn, db: Db) -> dict:
     belt = _belt_or_404(db, belt_id)
     belt.name = body.name
+    if body.title_points is not None:
+        if belt.kind == BeltKind.MAIN and body.title_points:
+            raise bad_request("Основной пояс очков сверх боя не даёт")
+        belt.title_points = body.title_points
     db.commit()
     return belt_out(belt)
 
@@ -238,6 +243,13 @@ def update_belt(belt_id: int, body: BeltIn, db: Db) -> dict:
 @router.post("/belts/{belt_id}/award")
 def award_belt(belt_id: int, body: BeltAwardIn, actor: StaffUser, db: Db) -> dict:
     return belt_detail(db, belts.award_manually(db, actor, belt_id, body.player_id), actor)
+
+
+@router.post("/belts/{belt_id}/fights", status_code=status.HTTP_201_CREATED)
+def record_belt_fight(belt_id: int, body: BeltFightIn, viewer: StaffUser, db: Db) -> dict:
+    """Бой за пояс одной формой, как «Записать бой»: засчитывается сразу, пояс у победителя."""
+    _belt_or_404(db, belt_id)
+    return fight_detail(fight_service.admin_record_belt_fight(db, viewer, belt_id, body), viewer)
 
 
 @router.post("/belts/{belt_id}/icon")

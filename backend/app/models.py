@@ -168,11 +168,15 @@ class Belt(Base):
     __tablename__ = "belts"
     __table_args__ = (
         Index("uq_belts_single_main", "kind", unique=True, postgresql_where=text("kind = 'main'")),
+        CheckConstraint("title_points >= 0", name="title_points_non_negative"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     kind: Mapped[BeltKind] = mapped_column(enum_type(BeltKind, "belt_kind"))
     name: Mapped[str] = mapped_column(String(100))
+    # Очки лиги за неосновной пояс, взятый в бою (не в турнире): взял +N, чемпион, проигравший
+    # его, −N, защита +N/2. Сумма запоминается в бою (title_fights.belt_points) при подтверждении.
+    title_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     icon_path: Mapped[str | None] = mapped_column(String(255))
     current_champion_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = created_at_column()
@@ -295,6 +299,8 @@ class TitleFight(Base):
     )
     winner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     is_defense: Mapped[bool | None] = mapped_column(Boolean)
+    # Belt.title_points на момент подтверждения боя: позднее изменение суммы прошлые бои не трогает.
+    belt_points: Mapped[int | None] = mapped_column(Integer)
     cancel_reason: Mapped[str | None] = mapped_column(Text)
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     cancelled_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
@@ -470,6 +476,8 @@ class RatingChange(Base):
     delta: Mapped[int] = mapped_column(Integer)
     # Только у проигравшего: на сколько меньше он потерял благодаря скидке за активность.
     loss_discount: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Очки за неосновной пояс в этом бою (сверх Elo): points_after = points_before + delta + belt_delta.
+    belt_delta: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     points_after: Mapped[int] = mapped_column(Integer)
     place_after: Mapped[int] = mapped_column(Integer)
     table_place_before: Mapped[int | None] = mapped_column(Integer)

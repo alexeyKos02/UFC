@@ -7,27 +7,41 @@ import Modal from '../../components/Modal.vue'
 import PlayerChip from '../../components/PlayerChip.vue'
 import StateBlock from '../../components/StateBlock.vue'
 import { useAction, useLoad } from '../../feedback'
+import { RECOMMENDED_BELT_POINTS, beltPointsLine } from '../../format'
 import type { Belt, PlayerBrief } from '../../types'
 
 const list = useLoad(() => api.get<Belt[]>('/belts'))
 const players = useLoad(() => api.get<PlayerBrief[]>('/players/options'))
 const { busy, run } = useAction()
 const newName = ref('')
+const newPoints = ref<number | ''>(RECOMMENDED_BELT_POINTS)
 const names = reactive<Record<number, string>>({})
+const points = reactive<Record<number, number | ''>>({})
 
 watch(list.data, (belts) => {
-  for (const belt of belts ?? []) names[belt.id] = belt.name
+  for (const belt of belts ?? []) {
+    names[belt.id] = belt.name
+    points[belt.id] = belt.title_points
+  }
 })
 
 async function create(): Promise<void> {
-  if (await run(() => api.post('/admin/belts', { name: newName.value }), 'Пояс создан')) {
+  const body = { name: newName.value, title_points: newPoints.value || 0 }
+  if (await run(() => api.post('/admin/belts', body), 'Пояс создан')) {
     newName.value = ''
+    newPoints.value = RECOMMENDED_BELT_POINTS
     await list.reload()
   }
 }
 
 async function rename(belt: Belt): Promise<void> {
   await run(() => api.patch(`/admin/belts/${belt.id}`, { name: names[belt.id] }), 'Название обновлено')
+  await list.reload()
+}
+
+async function savePoints(belt: Belt): Promise<void> {
+  const body = { name: belt.name, title_points: points[belt.id] || 0 }
+  await run(() => api.patch(`/admin/belts/${belt.id}`, body), 'Очки за пояс сохранены')
   await list.reload()
 }
 
@@ -60,10 +74,20 @@ async function uploadIcon(event: Event, belt: Belt): Promise<void> {
 
 <template>
   <section class="card stack">
-    <h3>Новый турнирный пояс</h3>
-    <form class="row" style="flex-wrap: nowrap" @submit.prevent="create">
-      <input v-model="newName" required maxlength="100" placeholder="Название пояса" aria-label="Название пояса" />
-      <button class="btn primary" type="submit" :disabled="busy">Создать</button>
+    <h3>Новый пояс</h3>
+    <form class="stack" @submit.prevent="create">
+      <div class="field-grid">
+        <label class="field">
+          Название
+          <input v-model="newName" required maxlength="100" placeholder="Название пояса" />
+        </label>
+        <label class="field">
+          Очки за пояс в бою
+          <input v-model.number="newPoints" type="number" min="0" max="1000" step="1" />
+        </label>
+      </div>
+      <p class="small muted">{{ beltPointsLine(Number(newPoints) || 0) }}. Рекомендуем {{ RECOMMENDED_BELT_POINTS }} (разумно 20–40): обычный бой даёт около 16 очков, победа в турнире на 4 игрока — 50. Пояс из турнира и выданный без боя очков не дают.</p>
+      <button class="btn primary" type="submit" :disabled="busy" style="align-self: flex-start">Создать</button>
     </form>
   </section>
   <StateBlock :loading="list.loading.value" :error="list.error.value" skeleton="cards">
@@ -80,6 +104,20 @@ async function uploadIcon(event: Event, belt: Belt): Promise<void> {
         <form class="row" style="flex-wrap: nowrap" @submit.prevent="rename(belt)">
           <input v-model="names[belt.id]" required maxlength="100" aria-label="Название" />
           <button class="btn" type="submit" :disabled="busy">Сохранить</button>
+        </form>
+        <form v-if="belt.kind !== 'main'" class="stack" style="gap: 6px" @submit.prevent="savePoints(belt)">
+          <label class="field">
+            Очки за пояс в бою
+            <div class="row" style="flex-wrap: nowrap">
+              <input v-model.number="points[belt.id]" type="number" min="0" max="1000" step="1" />
+              <button class="btn" type="submit" :disabled="busy || points[belt.id] === belt.title_points">Сохранить</button>
+            </div>
+          </label>
+          <span class="small muted">
+            {{ beltPointsLine(Number(points[belt.id]) || 0) }}. Рекомендуем {{ RECOMMENDED_BELT_POINTS }}.
+            Новая сумма — для следующих боёв.
+          </span>
+          <button v-if="points[belt.id] !== RECOMMENDED_BELT_POINTS" class="btn sm" type="button" style="align-self: flex-start" @click="points[belt.id] = RECOMMENDED_BELT_POINTS">Поставить {{ RECOMMENDED_BELT_POINTS }}</button>
         </form>
         <label class="field">
           Иконка (JPEG, PNG или WEBP)

@@ -10,7 +10,7 @@ import PlayerChip from '../components/PlayerChip.vue'
 import StateBlock from '../components/StateBlock.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { useAction, useLoad } from '../feedback'
-import { formatDate, formatDateTime, fromLocalInput } from '../format'
+import { beltPointsLine, formatDate, formatDateTime, fromLocalInput } from '../format'
 import type { BeltDetail, PlayerBrief, ResultPayload } from '../types'
 
 const props = defineProps<{ id: string }>()
@@ -30,6 +30,32 @@ const playerRecord = computed(() => {
 const player1 = ref<number | ''>('')
 const player2 = ref<number | ''>('')
 const scheduledAt = ref('')
+// Какая форма открыта: записать прошедший бой сразу с итогом или назначить бой заранее.
+const mode = ref<'record' | 'schedule' | null>(null)
+
+function openForm(next: 'record' | 'schedule'): void {
+  player1.value = ''
+  player2.value = ''
+  scheduledAt.value = ''
+  mode.value = next
+}
+
+/** Пара для формы итога: у пояса с чемпионом первый — чемпион. */
+const pair = computed<[PlayerBrief, PlayerBrief] | null>(() => {
+  const options = players?.data.value ?? []
+  const first = champion.value ?? options.find((player) => player.id === player1.value)
+  const second = options.find((player) => player.id === player2.value)
+  return first && second && first.id !== second.id ? [first, second] : null
+})
+
+async function recordFight(payload: ResultPayload): Promise<void> {
+  if (!data.value || !pair.value) return
+  const body = { ...payload, player1_id: pair.value[0].id, player2_id: pair.value[1].id }
+  if (await run(() => api.post(`/admin/belts/${data.value!.id}/fights`, body), 'Бой за пояс записан')) {
+    mode.value = null
+    await reload()
+  }
+}
 
 async function schedule(): Promise<void> {
   if (!data.value) return
@@ -40,9 +66,7 @@ async function schedule(): Promise<void> {
     scheduled_at: scheduledAt.value ? fromLocalInput(scheduledAt.value) : null,
   }
   if (await run(() => api.post('/admin/title-fights', body), 'Бой за пояс назначен')) {
-    player1.value = ''
-    player2.value = ''
-    scheduledAt.value = ''
+    mode.value = null
     await reload()
   }
 }
@@ -81,6 +105,7 @@ async function cancelFight(): Promise<void> {
           <div class="stack" style="gap: 4px">
             <h1>{{ data.name }}</h1>
             <span class="muted">{{ data.kind === 'main' ? 'Основной пояс' : 'Турнирный пояс' }}</span>
+            <span v-if="data.kind !== 'main' && data.title_points" class="small muted">Очки за пояс сверх боя: {{ beltPointsLine(data.title_points).toLowerCase() }}</span>
           </div>
         </div>
         <section class="section">
@@ -117,32 +142,18 @@ async function cancelFight(): Promise<void> {
               <button class="btn danger" type="button" :disabled="busy" @click="cancelling = true">Отменить бой</button>
             </div>
           </article>
-          <form v-else-if="isStaff" class="card stack" @submit.prevent="schedule">
-            <p v-if="champion" class="small muted">Чемпион {{ champion.nickname }} защищает пояс. Выберите претендента.</p>
-            <p v-else class="small muted">Пояс вакантен: выберите двух игроков.</p>
-            <div class="field-grid">
-              <label v-if="!champion" class="field">
-                Первый игрок
-                <select v-model.number="player1" required>
-                  <option value="" disabled>Выберите игрока</option>
-                  <option v-for="player in players?.data.value" :key="player.id" :value="player.id" :disabled="player.id === player2">{{ player.nickname }}</option>
-                </select>
-              </label>
-              <label class="field">
-                {{ champion ? 'Претендент' : 'Второй игрок' }}
-                <select v-model.number="player2" required>
-                  <option value="" disabled>Выберите игрока</option>
-                  <option v-for="player in players?.data.value" :key="player.id" :value="player.id" :disabled="player.id === player1 || player.id === champion?.id">{{ player.nickname }}</option>
-                </select>
-              </label>
-              <label class="field">
-                Дата и время (необязательно)
-                <input v-model="scheduledAt" type="datetime-local" />
-              </label>
+          <div v-else-if="isStaff" class="card stack">
+            <p class="small muted">
+              <template v-if="champion">Чемпион {{ champion.nickname }} защищает пояс.</template>
+              <template v-else>Пояс вакантен.</template>
+              Прошедший бой записывается сразу с итогом: он засчитывается без подтверждения игроков, пояс переходит победителю.
+              Бой за пояс — бой лиги: очки по Elo<template v-if="data.kind !== 'main' && data.title_points">, плюс за пояс: {{ beltPointsLine(data.title_points).toLowerCase() }}</template>.
+            </p>
+            <div class="row">
+              <button class="btn primary" type="button" @click="openForm('record')">Записать бой за пояс</button>
+              <button class="btn" type="button" @click="openForm('schedule')">Назначить бой заранее</button>
             </div>
-            <p class="small muted">Итог потом вносят игроки, как обычно, или админ здесь — тогда бой засчитывается сразу. Бой за пояс — бой лиги: очки начисляются по Elo.</p>
-            <button class="btn primary" type="submit" :disabled="busy" style="align-self: flex-start">Назначить бой</button>
-          </form>
+          </div>
         </section>
 
         <section class="section">
@@ -177,6 +188,51 @@ async function cancelFight(): Promise<void> {
         </section>
       </template>
     </StateBlock>
+
+    <Modal v-if="mode" :title="mode === 'record' ? `Бой за пояс «${data?.name}»` : 'Назначить бой за пояс'" @close="mode = null">
+      <div class="stack">
+        <div class="field-grid">
+          <label v-if="!champion" class="field">
+            Первый игрок
+            <select v-model.number="player1" required>
+              <option value="" disabled>Выберите игрока</option>
+              <option v-for="player in players?.data.value" :key="player.id" :value="player.id" :disabled="player.id === player2">{{ player.nickname }}</option>
+            </select>
+          </label>
+          <label v-else class="field">
+            Чемпион
+            <input :value="champion.nickname" disabled />
+          </label>
+          <label class="field">
+            {{ champion ? 'Претендент' : 'Второй игрок' }}
+            <select v-model.number="player2" required>
+              <option value="" disabled>Выберите игрока</option>
+              <option v-for="player in players?.data.value" :key="player.id" :value="player.id" :disabled="player.id === player1 || player.id === champion?.id">{{ player.nickname }}</option>
+            </select>
+          </label>
+        </div>
+        <template v-if="mode === 'record'">
+          <FightResultForm
+            v-if="pair"
+            :key="`${pair[0].id}-${pair[1].id}`"
+            :player1="pair[0]"
+            :player2="pair[1]"
+            :busy="busy"
+            submit-label="Записать и засчитать"
+            @submit="recordFight"
+          />
+          <p v-else class="small muted">Выберите {{ champion ? 'претендента' : 'обоих игроков' }} — появятся победитель, дата, способ и раунд.</p>
+        </template>
+        <form v-else class="stack" @submit.prevent="schedule">
+          <label class="field">
+            Дата и время (необязательно)
+            <input v-model="scheduledAt" type="datetime-local" />
+          </label>
+          <p class="small muted">Итог потом вносят игроки, как обычно, или админ кнопкой «Внести итог».</p>
+          <button class="btn primary" type="submit" :disabled="busy || !pair">Назначить бой</button>
+        </form>
+      </div>
+    </Modal>
 
     <Modal v-if="recording && openFight" :title="`Итог боя за пояс «${data?.name}»`" @close="recording = false">
       <p class="small muted">Бой засчитается сразу, без подтверждения игроков: пояс перейдёт победителю, очки начислятся.</p>

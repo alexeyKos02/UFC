@@ -484,7 +484,14 @@ const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
             <b :class="tooltip.point.item.won ? 'tone-plus' : 'tone-minus'">{{ tooltip.point.item.won ? 'Победа' : 'Поражение' }}</b>
             {{ tooltip.point.item.won ? 'над' : 'от' }} {{ tooltip.point.item.opponent?.nickname }}
           </span>
-          <span>{{ valueLabel(tooltip.point) }}<template v-if="mode === 'points'"> ({{ signed(tooltip.point.item.delta) }})</template></span>
+          <span>{{ valueLabel(tooltip.point) }}<template v-if="mode === 'points'"> ({{ signed(tooltip.point.item.delta + (tooltip.point.item.belt_delta ?? 0)) }})</template></span>
+          <template v-if="tooltip.point.item.belt_delta">
+            <span class="small muted">Бой {{ signed(tooltip.point.item.delta) }}</span>
+            <span class="chart-tip-reason">
+              <b :class="tooltip.point.item.belt_delta > 0 ? 'tone-gold' : 'tone-minus'">{{ signed(tooltip.point.item.belt_delta) }}</b>
+              за пояс «{{ tooltip.point.item.belt?.name }}»
+            </span>
+          </template>
           <span v-if="tooltipMark === 'take'" class="tone-gold">Завоевал пояс чемпиона</span>
           <span v-else-if="tooltipMark === 'defend'" class="tone-gold">Защитил пояс чемпиона</span>
           <span v-else-if="tooltipMark === 'lose'" class="tone-minus">Потерял пояс чемпиона</span>

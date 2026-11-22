@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db import utcnow
 from app.errors import bad_request, conflict, forbidden, not_found
-from app.models import Belt, BeltWin, Fight, FightKind, FightStatus, TitleFight, TitleFightStatus, User, UserStatus
+from app.models import Belt, BeltKind, BeltWin, Fight, FightKind, FightStatus, TitleFight, TitleFightStatus, User, UserStatus
 from app.schemas import FightResultIn, TitleFightIn
 from app.services import belts
 from app.services.fight_records import create_fight_record
@@ -39,6 +39,17 @@ def _belt_for(db: Session, belt_id: int | None) -> Belt:
 def schedule(db: Session, actor: User, data: TitleFightIn) -> TitleFight:
     """Бой за пояс (основной или турнирный): чемпион против претендента, у вакантного — два игрока."""
     acquire_rating_lock(db)
+    title_fight = create(db, actor, data)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise conflict(ALREADY_SCHEDULED) from None
+    return title_fight
+
+
+def create(db: Session, actor: User, data: TitleFightIn) -> TitleFight:
+    """Назначение боя за пояс без commit. Замок рейтинга уже взят вызывающим."""
     belt = _belt_for(db, data.belt_id)
     if db.scalar(
         select(TitleFight.id).where(TitleFight.belt_id == belt.id, TitleFight.status == TitleFightStatus.SCHEDULED)
@@ -75,9 +86,9 @@ def schedule(db: Session, actor: User, data: TitleFightIn) -> TitleFight:
     )
     db.add(title_fight)
     try:
-        db.commit()
+        with db.begin_nested():
+            db.flush()
     except IntegrityError:
-        db.rollback()
         raise conflict(ALREADY_SCHEDULED) from None
     return title_fight
 
@@ -130,6 +141,8 @@ def on_fight_confirmed(db: Session, fight: Fight) -> None:
     if title_fight.status != TitleFightStatus.SCHEDULED:
         raise conflict("Назначение закрыто, подтвердить результат нельзя")
     win = belts.award(db, title_fight.belt_id, fight, title_fight_id=title_fight.id)
+    # Сумма за неосновной пояс запоминается в бою: её позднее изменение прошлые бои не трогает.
+    title_fight.belt_points = title_fight.belt.title_points if title_fight.belt.kind != BeltKind.MAIN else 0
     title_fight.status = TitleFightStatus.COMPLETED
     title_fight.winner_id = fight.winner_id
     title_fight.is_defense = win.is_defense
@@ -149,6 +162,7 @@ def on_fight_deleted(db: Session, fight: Fight, actor: User) -> None:
         belts.revoke(db, win)
     title_fight.winner_id = None
     title_fight.is_defense = None
+    title_fight.belt_points = None
     title_fight.completed_at = None
     other_open = db.scalar(
         select(TitleFight.id).where(

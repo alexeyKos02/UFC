@@ -56,6 +56,9 @@ const duels = computed<DuelRow[]>(() => {
     rows.push(placeRow('Место до боя', [tablePlace(first, 'before'), tablePlace(second, 'before')]))
     rows.push(placeRow('Место после боя', [tablePlace(first, 'after'), tablePlace(second, 'after')]))
     rows.push(row('Очки до боя', [first.points_before, second.points_before]))
+    if (first.belt_delta || second.belt_delta) {
+      rows.push(row('Очки за пояс', [first.belt_delta, second.belt_delta], signed))
+    }
     if (fight.adjustment) {
       rows.push(row('Ручная корректировка', [manual(fight.player1.id), manual(fight.player2.id)], signed))
     }

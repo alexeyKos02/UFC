@@ -34,6 +34,20 @@ export function recommendedTournamentPrizes(capacity: number, hasThirdPlace: boo
   return { first, second: Math.round(first * 0.4), third }
 }
 
+/**
+ * Подсказка суммы за неосновной пояс, взятый в бою. Бой лиги по Elo даёт около 16 очков
+ * (новичку — около 24), победа в турнире на 4 игрока — 50 (25 за круг сетки). Пояс — один бой,
+ * поэтому взять его выгоднее обычной победы, но дешевле победы в турнире: 30 (разумно 20–40).
+ * Защита — половина. Больше 50 — пояс начнёт обгонять турниры и раздувать очки у держателя.
+ */
+export const RECOMMENDED_BELT_POINTS = 30
+
+/** Что получат участники боя за пояс с суммой N: взял, потерял, защитил. */
+export function beltPointsLine(points: number): string {
+  if (!points) return 'Очков сверх боя не даёт'
+  return `Взял +${points}, потерял −${points}, защитил +${Math.floor(points / 2 + 0.5)}`
+}
+
 export const fightStatusLabel: Record<FightStatus, string> = {
   pending: 'Ждёт подтверждения',
   disputed: 'Оспорен',

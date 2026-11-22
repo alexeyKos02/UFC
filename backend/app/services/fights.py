@@ -17,7 +17,7 @@ from app.models import (
     User,
     UserStatus,
 )
-from app.schemas import FightCorrectIn, FightCreateIn, TitleResultIn
+from app.schemas import BeltFightIn, FightCorrectIn, FightCreateIn, TitleFightIn, TitleResultIn
 from app.services import rating, recalc, title_fights, tournaments
 from app.services.fight_records import (
     add_version,
@@ -201,6 +201,28 @@ def admin_record_title_result(db: Session, actor: User, title_fight_id: int, dat
         raise not_found("Бой за пояс не найден")
     if title_fight.status != TitleFightStatus.SCHEDULED:
         raise conflict("Назначение закрыто, итог внести нельзя")
+    fight = _record_title_result(db, actor, title_fight, data)
+    db.commit()
+    return fight
+
+
+def admin_record_belt_fight(db: Session, actor: User, belt_id: int, data: BeltFightIn) -> Fight:
+    """«Записать бой за пояс» одной формой: бой назначается и сразу засчитывается с итогом админа.
+
+    Если по поясу уже назначен бой, сначала нужно внести его итог или отменить его.
+    """
+    rating.acquire_rating_lock(db)
+    title_fight = title_fights.create(
+        db,
+        actor,
+        TitleFightIn(belt_id=belt_id, player1_id=data.player1_id, player2_id=data.player2_id, scheduled_at=data.fought_at),
+    )
+    fight = _record_title_result(db, actor, title_fight, data)
+    db.commit()
+    return fight
+
+
+def _record_title_result(db: Session, actor: User, title_fight: TitleFight, data: TitleResultIn) -> Fight:
     now = utcnow()
     reason = data.reason or "Итог внёс администратор"
     existing = db.scalar(
@@ -232,7 +254,6 @@ def admin_record_title_result(db: Session, actor: User, title_fight_id: int, dat
     fight.resolution_reason = reason
     fight.resolved_at = now
     _finalize(db, fight)
-    db.commit()
     return fight
 
 
