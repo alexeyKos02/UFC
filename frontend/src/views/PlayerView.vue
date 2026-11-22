@@ -3,10 +3,11 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
 import { setAccount } from '../auth'
-import { BELT_MARK_LABELS, BELT_MARK_ORDER, beltMark } from '../beltMarks'
+import { BELT_MARK_LABELS, BELT_MARK_ORDER, PRIZE_LABELS, PRIZE_ORDER, beltMark, prizePlace } from '../beltMarks'
 import AnimatedNumber from '../components/AnimatedNumber.vue'
 import BeltIcon from '../components/BeltIcon.vue'
 import BeltMarkIcon from '../components/BeltMarkIcon.vue'
+import PrizeCupIcon from '../components/PrizeCupIcon.vue'
 import ChampionMark from '../components/ChampionMark.vue'
 import FightCard from '../components/FightCard.vue'
 import HeadToHead from '../components/HeadToHead.vue'
@@ -43,6 +44,11 @@ const chartBeltMarks = computed(() => {
   const present = new Set(chartHistory.value.map(beltMark))
   return BELT_MARK_ORDER.filter((mark) => present.has(mark))
 })
+const chartPrizes = computed(() => {
+  const present = new Set(chartHistory.value.map(prizePlace))
+  return PRIZE_ORDER.filter((place) => present.has(place))
+})
+const chartHasGrants = computed(() => chartHistory.value.some((item) => item.event === 'grant'))
 
 /** Статистика профиля: все бои, только лига (обычные и титульные) или только турниры. */
 const statScope = ref<StatScope>('all')
@@ -265,8 +271,8 @@ async function upload(event: Event, path: string): Promise<void> {
               </div>
             </div>
             <RatingChart v-if="chartHistory.length" :history="chartHistory" :mode="chartMode" />
-            <p v-else class="small muted">За последние 30 дней боёв не было.</p>
-            <div v-if="chartHasChampion || chartBeltMarks.length" class="chart-legend small muted">
+            <p v-else class="small muted">За последние 30 дней очки не менялись.</p>
+            <div v-if="chartHasChampion || chartBeltMarks.length || chartPrizes.length || chartHasGrants" class="chart-legend small muted">
               <span v-if="chartHasChampion" class="chart-legend-item">
                 <span class="chart-legend-champion" aria-hidden="true"></span>с поясом чемпиона
               </span>
@@ -274,9 +280,17 @@ async function upload(event: Event, path: string): Promise<void> {
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><BeltMarkIcon :mark="mark" /></svg>
                 {{ BELT_MARK_LABELS[mark] }}
               </span>
+              <span v-for="place in chartPrizes" :key="`prize-${place}`" class="chart-legend-item">
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><PrizeCupIcon :place="place" /></svg>
+                {{ PRIZE_LABELS[place] }}
+              </span>
+              <span v-if="chartHasGrants" class="chart-legend-item">
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle class="chart-legend-grant" cx="8" cy="8" r="4.5" /></svg>
+                очки от администрации
+              </span>
             </div>
             <p class="small muted">
-              {{ chartMode === 'points' ? 'Очки после каждого боя.' : 'Место в таблице рейтинга после каждого боя.' }}
+              {{ chartMode === 'points' ? 'Очки' : 'Место в таблице рейтинга' }} после каждого боя лиги, приза за место в турнире и начисления администрации.
               Масштаб: «+ / −», Ctrl + колесо или двумя пальцами.
             </p>
           </div>

@@ -110,8 +110,8 @@ def points_places(points, roster) -> dict[int, int]:
     return {player: place_of[points[player]] for player in roster}
 
 
-def tournament_prizes(connection: Connection) -> dict[int, list[tuple[int, int]]]:
-    """Призы завершённых турниров в очки лиги: бой, завершивший турнир, -> [(игрок, очки)].
+def tournament_prizes(connection: Connection) -> dict[int, list[tuple[int, int, int, int]]]:
+    """Призы завершённых турниров в очки лиги: бой, завершивший турнир, -> [(игрок, очки, место, турнир)].
 
     1-е место — победитель финала, 2-е — проигравший в финале. 3-е — победитель матча за 3-е место,
     а без такого матча — оба проигравших полуфиналиста, кроме проигравшего технически (не явился).
@@ -143,23 +143,69 @@ def tournament_prizes(connection: Connection) -> dict[int, list[tuple[int, int]]
             return None
         return match.player2_id if match.winner_id == match.player1_id else match.player1_id
 
-    prizes: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    prizes: dict[int, list[tuple[int, int, int, int]]] = defaultdict(list)
     for tournament in tournaments:
         rows = matches[tournament.id]
         final = next((m for m in rows if m.round == tournament.rounds_count and not m.is_third_place), None)
         if final is None or final.fight_id is None:
             continue
         third_match = next((m for m in rows if m.is_third_place), None) if tournament.has_third_place else None
-        places = [(final.winner_id, tournament.win_points), (loser(final), tournament.second_points)]
+        places = [(final.winner_id, tournament.win_points, 1), (loser(final), tournament.second_points, 2)]
         if third_match is not None:
-            places.append((third_match.winner_id, tournament.third_points))
+            places.append((third_match.winner_id, tournament.third_points, 3))
         else:
             semis = [m for m in rows if m.round == tournament.rounds_count - 1 and not m.is_third_place]
-            places += [(loser(m), tournament.third_points) for m in semis if m.walkover_at is None]
+            places += [(loser(m), tournament.third_points, 3) for m in semis if m.walkover_at is None]
         closing = [m for m in (final, third_match) if m is not None and m.fight_id is not None]
         last = max(closing, key=lambda m: (m.fought_at, m.fight_id))
-        prizes[last.fight_id] += [(player, prize) for player, prize in places if player is not None and prize]
+        prizes[last.fight_id] += [
+            (player, prize, place, tournament.id) for player, prize, place in places if player is not None and prize
+        ]
     return prizes
+
+
+def _places_columns(table_before: dict, table_after: dict, player: int) -> dict:
+    return {
+        "table_place_before": table_before.get(player, (None, False))[0],
+        "champion_before": table_before.get(player, (None, False))[1],
+        "table_place_after": table_after.get(player, (None, False))[0],
+        "champion_after": table_after.get(player, (None, False))[1],
+    }
+
+
+def _write_snapshots(connection: Connection, from_key, prize_rows: list[dict], grant_rows: list[dict]) -> None:
+    """Снимки для графика: призы турниров переписываются с места пересчёта, у ручных очков —
+    обновляются колонки. Строки призов боёв, которые удалены или больше не завершают турнир, исчезают."""
+    if from_key is None:
+        connection.execute(text("DELETE FROM tournament_prize_changes"))
+    else:
+        connection.execute(
+            text(
+                "DELETE FROM tournament_prize_changes p USING fights f "
+                "WHERE f.id = p.fight_id AND (f.fought_at, f.id) >= (:at, :id)"
+            ),
+            {"at": from_key[0], "id": from_key[1]},
+        )
+    if prize_rows:
+        connection.execute(
+            text(
+                "INSERT INTO tournament_prize_changes (tournament_id, fight_id, player_id, place, points_before, "
+                "delta, points_after, table_place_before, champion_before, table_place_after, champion_after, "
+                "created_at) VALUES (:tournament_id, :fight_id, :player_id, :place, :points_before, :delta, "
+                ":points_after, :table_place_before, :champion_before, :table_place_after, :champion_after, "
+                ":created_at)"
+            ),
+            prize_rows,
+        )
+    if grant_rows:
+        connection.execute(
+            text(
+                "UPDATE point_grants SET points_before = :points_before, points_after = :points_after, "
+                "table_place_before = :table_place_before, champion_before = :champion_before, "
+                "table_place_after = :table_place_after, champion_after = :champion_after WHERE id = :id"
+            ),
+            grant_rows,
+        )
 
 
 def recalculate(
@@ -216,6 +262,13 @@ def recalculate(
         )
     ):
         events.append((row.updated_at, 3, row.fight_id, "adjustment", row))
+    # Таблицы из 0014: миграции 0010 и 0012 вызывают этот модуль раньше, чем они появились.
+    has_snapshots = connection.execute(text("SELECT to_regclass('point_grants') IS NOT NULL")).scalar()
+    if has_snapshots:
+        for row in connection.execute(
+            text("SELECT id, player_id, delta, created_at FROM point_grants WHERE status = 'active'")
+        ):
+            events.append((row.created_at, 3, row.id, "grant", row))
     for row in connection.execute(text("SELECT id, player_id, delta, due_at FROM rating_decays")):
         events.append((row.due_at, 4, row.id, "decay", row))
     for row in connection.execute(text("SELECT id, user_id, action, place_after, created_at FROM special_place_log")):
@@ -231,6 +284,8 @@ def recalculate(
     discounts: dict[tuple[int, int], list[datetime]] = defaultdict(list)
     writes: list[dict] = []
     inserts: list[dict] = []
+    prize_rows: list[dict] = []
+    grant_rows: list[dict] = []
     changed_fights: set[int] = set()
 
     def snapshot() -> tuple[dict, dict]:
@@ -253,6 +308,23 @@ def recalculate(
         if kind == "decay":
             points[row.player_id] += row.delta
             continue
+        if kind == "grant":
+            tracked = from_key is None or moment >= from_key[0]
+            if tracked:
+                _, table_before = snapshot()
+            before_points = points[row.player_id]
+            points[row.player_id] += row.delta
+            if tracked:
+                _, table_after = snapshot()
+                grant_rows.append(
+                    {
+                        "id": row.id,
+                        "points_before": before_points,
+                        "points_after": points[row.player_id],
+                        **_places_columns(table_before, table_after, row.player_id),
+                    }
+                )
+            continue
         if kind == "special":
             if row.action == "clear":
                 pinned.pop(row.user_id, None)
@@ -266,10 +338,30 @@ def recalculate(
         if row.kind == "tournament":
             # Бой турнира очков лиги не даёт и не считается в калибровку, скидки и личные встречи
             # таблицы. Пояс и призы за места начисляются боем, который завершил турнир.
+            prizes = fight_prize.get(row.id, ())
+            if tracked and prizes:
+                _, table_before = snapshot()
             if row.id in fight_belt:
                 champion = fight_belt[row.id]
-            for player, prize in fight_prize.get(row.id, ()):
+            before_prize = {player: points[player] for player, *_ in prizes}
+            for player, prize, _, _ in prizes:
                 points[player] += prize
+            if tracked and prizes:
+                _, table_after = snapshot()
+                for player, prize, place, tournament_id in prizes:
+                    prize_rows.append(
+                        {
+                            "tournament_id": tournament_id,
+                            "fight_id": row.id,
+                            "player_id": player,
+                            "place": place,
+                            "points_before": before_prize[player],
+                            "delta": prize,
+                            "points_after": before_prize[player] + prize,
+                            "created_at": moment,
+                            **_places_columns(table_before, table_after, player),
+                        }
+                    )
             continue
         if tracked:
             points_before_place, table_before = snapshot()
@@ -346,6 +438,8 @@ def recalculate(
             ),
             inserts,
         )
+    if has_snapshots:
+        _write_snapshots(connection, from_key, prize_rows, grant_rows)
     if changed_fights and trigger_fight_id is not None:
         connection.execute(
             text(

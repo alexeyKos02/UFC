@@ -6,8 +6,18 @@ from sqlalchemy.orm import Session
 
 from app.db import utcnow
 from app.errors import bad_request, conflict, forbidden, not_found
-from app.models import Fight, FightConfirmation, FightKind, FightStatus, RatingChange, User, UserStatus
-from app.schemas import FightCorrectIn, FightCreateIn
+from app.models import (
+    Fight,
+    FightConfirmation,
+    FightKind,
+    FightStatus,
+    RatingChange,
+    TitleFight,
+    TitleFightStatus,
+    User,
+    UserStatus,
+)
+from app.schemas import FightCorrectIn, FightCreateIn, TitleResultIn
 from app.services import rating, recalc, title_fights, tournaments
 from app.services.fight_records import (
     add_version,
@@ -170,6 +180,57 @@ def admin_accept(db: Session, actor: User, fight_id: int, reason: str | None) ->
     fight.resolved_by_id = actor.id
     fight.resolution_reason = reason
     fight.resolved_at = utcnow()
+    _finalize(db, fight)
+    db.commit()
+    return fight
+
+
+def admin_record_title_result(db: Session, actor: User, title_fight_id: int, data: TitleResultIn) -> Fight:
+    """Админ или владелец вносит итог назначенного боя за пояс, бой засчитывается сразу.
+
+    Если игроки уже внесли результат, но не подтвердили его, их запись отменяется: итог админа главнее.
+    """
+    rating.acquire_rating_lock(db)
+    title_fight = db.scalar(
+        select(TitleFight)
+        .where(TitleFight.id == title_fight_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if title_fight is None:
+        raise not_found("Бой за пояс не найден")
+    if title_fight.status != TitleFightStatus.SCHEDULED:
+        raise conflict("Назначение закрыто, итог внести нельзя")
+    now = utcnow()
+    reason = data.reason or "Итог внёс администратор"
+    existing = db.scalar(
+        select(Fight)
+        .where(Fight.title_fight_id == title_fight.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if existing is not None:
+        if existing.status == FightStatus.CONFIRMED:
+            raise conflict("Результат этого боя уже подтверждён")
+        existing.status = FightStatus.CANCELLED
+        existing.resolved_by_id = actor.id
+        existing.resolution_reason = f"Заменён итогом администратора: {reason}"
+        existing.resolved_at = now
+        existing.title_fight_id = None
+        db.flush()
+    fight = create_fight_record(
+        db,
+        FightKind.TITLE,
+        actor,
+        title_fight.player1_id,
+        title_fight.player2_id,
+        data,
+        title_fight_id=title_fight.id,
+        confirm_by_author=False,
+    )
+    fight.resolved_by_id = actor.id
+    fight.resolution_reason = reason
+    fight.resolved_at = now
     _finalize(db, fight)
     db.commit()
     return fight

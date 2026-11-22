@@ -75,19 +75,29 @@ def _belt_win_out(win: BeltWin) -> dict:
     }
 
 
-def belt_detail(db: Session, belt: Belt) -> dict:
+def belt_detail(db: Session, belt: Belt, viewer: User) -> dict:
     wins = db.scalars(
         select(BeltWin).where(BeltWin.belt_id == belt.id).order_by(BeltWin.won_at.desc(), BeltWin.id.desc())
     ).all()
-    return {**belt_out(belt), "history": [_belt_win_out(win) for win in wins]}
+    # Назначенный бой за пояс: виден всем, админ и владелец вносят итог прямо на странице пояса.
+    open_fight = db.scalar(
+        select(TitleFight).where(TitleFight.belt_id == belt.id, TitleFight.status == TitleFightStatus.SCHEDULED)
+    )
+    return {
+        **belt_out(belt),
+        "history": [_belt_win_out(win) for win in wins],
+        "open_title_fight": title_fight_out(open_fight, viewer) if open_fight else None,
+    }
 
 
 def past_belt_caption(belt: Belt, wins: list[BeltWin]) -> str:
     if all(win.awarded_by_id for win in wins):
         return f"Бывший обладатель пояса „{belt.name}“"
-    if belt.kind == BeltKind.MAIN:
-        return f"Победитель титульного боя за пояс „{belt.name}“"
-    return f"Победитель турнира за пояс „{belt.name}“"
+    # Турнирный пояс можно взять и в бою за пояс: подпись — по последней победе в бою или турнире.
+    last = next(win for win in wins if not win.awarded_by_id)
+    if last.tournament_id is not None:
+        return f"Победитель турнира за пояс „{belt.name}“"
+    return f"Победитель титульного боя за пояс „{belt.name}“"
 
 
 def player_belts(db: Session, user: User) -> dict:

@@ -499,6 +499,68 @@ class RatingDecay(Base):
     player: Mapped[User] = relationship()
 
 
+class TournamentPrizeChange(Base):
+    """Приз за 1–3-е место турнира в очки лиги: снимок очков и номера в таблице до и после приза.
+
+    Пишет пересчёт (recalc.py): приз начисляется боем, завершившим турнир (fight_id), по его дате.
+    Нужен для графика в профиле. Если бой удалён или турнир снова открыт, строки исчезают.
+    """
+
+    __tablename__ = "tournament_prize_changes"
+    __table_args__ = (UniqueConstraint("fight_id", "player_id", name="uq_tournament_prize_changes_fight_player"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tournament_id: Mapped[int] = mapped_column(ForeignKey("tournaments.id", ondelete="CASCADE"), index=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"), index=True)
+    player_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    place: Mapped[int] = mapped_column(Integer)
+    points_before: Mapped[int] = mapped_column(Integer)
+    delta: Mapped[int] = mapped_column(Integer)
+    points_after: Mapped[int] = mapped_column(Integer)
+    table_place_before: Mapped[int | None] = mapped_column(Integer)
+    table_place_after: Mapped[int | None] = mapped_column(Integer)
+    champion_before: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    champion_after: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = created_at_column()
+
+    tournament: Mapped["Tournament"] = relationship()
+    fight: Mapped[Fight] = relationship()
+
+
+class PointGrant(Base):
+    """Очки, которые админ или владелец начислил (или снял) игроку вручную, с причиной.
+
+    Событие пересчёта по created_at. Снимок до и после (points_*, table_place_*, champion_*)
+    пишет пересчёт — для графика в профиле. Причину видят только админ и владелец.
+    """
+
+    __tablename__ = "point_grants"
+    __table_args__ = (CheckConstraint("delta <> 0", name="delta_not_zero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    player_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    delta: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(Text)
+    status: Mapped[AdjustmentStatus] = mapped_column(
+        enum_type(AdjustmentStatus, "point_grant_status"), default=AdjustmentStatus.ACTIVE
+    )
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    cancelled_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_reason: Mapped[str | None] = mapped_column(Text)
+    points_before: Mapped[int | None] = mapped_column(Integer)
+    points_after: Mapped[int | None] = mapped_column(Integer)
+    table_place_before: Mapped[int | None] = mapped_column(Integer)
+    table_place_after: Mapped[int | None] = mapped_column(Integer)
+    champion_before: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    champion_after: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    player: Mapped[User] = relationship(foreign_keys=[player_id])
+    created_by: Mapped[User] = relationship(foreign_keys=[created_by_id])
+    cancelled_by: Mapped[User | None] = relationship(foreign_keys=[cancelled_by_id])
+
+
 class RatingAdjustment(Base):
     """Действующая ручная корректировка боя. winner_delta положительна, если очки ушли победителю."""
 

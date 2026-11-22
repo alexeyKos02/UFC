@@ -41,8 +41,11 @@ def apply_version_fields(fight: Fight, data: FightResultIn) -> None:
     fight.round_no = data.round
 
 
-def add_version(db: Session, fight: Fight, actor: User, data: FightResultIn, version_no: int) -> FightVersion:
-    """Новая версия сразу несёт подтверждение автора: это смысл кнопки «Отправить и подтвердить»."""
+def add_version(
+    db: Session, fight: Fight, actor: User, data: FightResultIn, version_no: int, confirm_by_author: bool = True
+) -> FightVersion:
+    """Новая версия сразу несёт подтверждение автора: это смысл кнопки «Отправить и подтвердить».
+    Итог, который вносит админ (не участник боя), его подтверждения не несёт."""
     version = FightVersion(
         fight_id=fight.id,
         version_no=version_no,
@@ -54,7 +57,8 @@ def add_version(db: Session, fight: Fight, actor: User, data: FightResultIn, ver
     )
     db.add(version)
     db.flush()
-    db.add(FightConfirmation(version_id=version.id, player_id=actor.id))
+    if confirm_by_author:
+        db.add(FightConfirmation(version_id=version.id, player_id=actor.id))
     return version
 
 
@@ -69,6 +73,7 @@ def create_fight_record(
     tournament_match_id: int | None = None,
     title_fight_id: int | None = None,
     planned_fight_id: int | None = None,
+    confirm_by_author: bool = True,
 ) -> Fight:
     validate_result(data, player1_id, player2_id)
     ensure_players_active(db, [player1_id, player2_id])
@@ -86,6 +91,6 @@ def create_fight_record(
     apply_version_fields(fight, data)
     db.add(fight)
     db.flush()
-    add_version(db, fight, actor, data, 1)
+    add_version(db, fight, actor, data, 1, confirm_by_author)
     db.flush()
     return fight

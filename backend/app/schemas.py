@@ -93,6 +93,8 @@ class BeltAwardIn(BaseModel):
 
 
 class TitleFightIn(BaseModel):
+    # Без пояса — основной (так назначает раздел «Админка → Титульные бои»).
+    belt_id: int | None = None
     player1_id: int | None = None
     player2_id: int
     scheduled_at: AwareDatetime | None = None
@@ -107,6 +109,16 @@ class AdjustmentIn(BaseModel):
     points: int = Field(ge=-100_000, le=100_000)
     reason: Reason
     expected_version: int = Field(ge=0)
+
+
+class PointGrantIn(BaseModel):
+    player_id: int
+    points: int = Field(ge=-100_000, le=100_000)
+    reason: Reason
+
+
+class TitleResultIn(FightResultIn):
+    reason: Reason | None = None
 
 
 class AdjustmentCancelIn(BaseModel):

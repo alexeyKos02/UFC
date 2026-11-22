@@ -8,6 +8,8 @@ const props = defineProps<{
   player2: PlayerBrief
   initial?: { fought_at: string; winner_id: number; method: FightMethod | null; round: number | null }
   busy?: boolean
+  /** Подпись кнопки: админ, внося итог боя за пояс, засчитывает его сразу. */
+  submitLabel?: string
 }>()
 const emit = defineEmits<{ submit: [payload: ResultPayload] }>()
 
@@ -70,6 +72,6 @@ function submit(): void {
       </label>
     </div>
     <p v-if="problem" class="small tone-red">{{ problem }}</p>
-    <button class="btn primary" type="submit" :disabled="busy">Отправить и подтвердить</button>
+    <button class="btn primary" type="submit" :disabled="busy">{{ submitLabel ?? 'Отправить и подтвердить' }}</button>
   </form>
 </template>

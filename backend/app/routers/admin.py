@@ -12,6 +12,7 @@ from app.models import (
     BeltKind,
     Fight,
     FightStatus,
+    PointGrant,
     Promo,
     RatingAdjustment,
     RatingAdjustmentLog,
@@ -29,11 +30,13 @@ from app.schemas import (
     BeltAwardIn,
     BeltIn,
     CancelIn,
+    PointGrantIn,
     PromoIn,
     PublishIn,
     RoleIn,
     SpecialPlaceIn,
     TitleFightIn,
+    TitleResultIn,
     TournamentIn,
     WalkoverIn,
 )
@@ -55,6 +58,7 @@ from app.services import (
     adjustments,
     belts,
     fight_order,
+    point_grants,
     promos,
     rating,
     special_places,
@@ -233,7 +237,7 @@ def update_belt(belt_id: int, body: BeltIn, db: Db) -> dict:
 
 @router.post("/belts/{belt_id}/award")
 def award_belt(belt_id: int, body: BeltAwardIn, actor: StaffUser, db: Db) -> dict:
-    return belt_detail(db, belts.award_manually(db, actor, belt_id, body.player_id))
+    return belt_detail(db, belts.award_manually(db, actor, belt_id, body.player_id), actor)
 
 
 @router.post("/belts/{belt_id}/icon")
@@ -259,6 +263,12 @@ def admin_title_fights(viewer: StaffUser, db: Db) -> list[dict]:
 @router.post("/title-fights", status_code=status.HTTP_201_CREATED)
 def schedule_title_fight(body: TitleFightIn, viewer: StaffUser, db: Db) -> dict:
     return title_fight_out(title_fights.schedule(db, viewer, body), viewer)
+
+
+@router.post("/title-fights/{title_fight_id}/result")
+def admin_title_result(title_fight_id: int, body: TitleResultIn, viewer: StaffUser, db: Db) -> dict:
+    """Админ или владелец вносит итог назначенного боя за пояс: бой засчитывается сразу."""
+    return fight_detail(fight_service.admin_record_title_result(db, viewer, title_fight_id, body), viewer)
 
 
 @router.post("/title-fights/{title_fight_id}/cancel")
@@ -365,6 +375,39 @@ def adjustment_log(db: Db, limit: int = Query(default=100, ge=1, le=500)) -> lis
         }
         for row in rows
     ]
+
+
+def _point_grant_out(grant: PointGrant) -> dict:
+    return {
+        "id": grant.id,
+        "player": player_brief(grant.player),
+        "delta": grant.delta,
+        "reason": grant.reason,
+        "status": grant.status.value,
+        "created_by": player_brief(grant.created_by),
+        "created_at": grant.created_at,
+        "points_before": grant.points_before,
+        "points_after": grant.points_after,
+        "cancelled_by": player_brief(grant.cancelled_by),
+        "cancelled_at": grant.cancelled_at,
+        "cancel_reason": grant.cancel_reason,
+    }
+
+
+@router.get("/rating/point-grants")
+def point_grant_list(db: Db, limit: int = Query(default=100, ge=1, le=500)) -> list[dict]:
+    rows = db.scalars(select(PointGrant).order_by(PointGrant.id.desc()).limit(limit)).all()
+    return [_point_grant_out(row) for row in rows]
+
+
+@router.post("/rating/point-grants", status_code=status.HTTP_201_CREATED)
+def create_point_grant(body: PointGrantIn, viewer: StaffUser, db: Db) -> dict:
+    return _point_grant_out(point_grants.create_grant(db, viewer, body.player_id, body.points, body.reason))
+
+
+@router.post("/rating/point-grants/{grant_id}/cancel")
+def cancel_point_grant(grant_id: int, body: CancelIn, viewer: StaffUser, db: Db) -> dict:
+    return _point_grant_out(point_grants.cancel_grant(db, viewer, grant_id, body.reason))
 
 
 @router.put("/rating/special-places/{user_id}")

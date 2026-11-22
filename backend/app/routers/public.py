@@ -44,11 +44,11 @@ def list_belts(_: CurrentUser, db: Db) -> list[dict]:
 
 
 @router.get("/belts/{belt_id}")
-def get_belt(belt_id: int, _: CurrentUser, db: Db) -> dict:
+def get_belt(belt_id: int, viewer: CurrentUser, db: Db) -> dict:
     belt = db.get(Belt, belt_id)
     if belt is None:
         raise not_found("Пояс не найден")
-    return belt_detail(db, belt)
+    return belt_detail(db, belt, viewer)
 
 
 @router.get("/title-fights/{title_fight_id}")

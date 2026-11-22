@@ -12,6 +12,9 @@
   --red-strong: #c5213a;
   --gold: #eebd3a;
   --silver: #9aa0ab;
+  /* Кубки за 2-е и 3-е место в турнире на графике профиля. */
+  --prize-silver: #c9ced6;
+  --prize-bronze: #cd8a4f;
   --green: #4cc38a;
   --green-bar: #38ad73;
   --corner-red: #e23a4e;
@@ -1868,6 +1871,74 @@ th.num {
 
 .chart-dot.loss {
   fill: var(--red);
+}
+
+/* Приз за место в турнире: точка цвета кубка. */
+.chart-dot.prize.place-1,
+.prize-cup.place-1 .prize-cup-fill {
+  fill: var(--gold);
+}
+
+.chart-dot.prize.place-2,
+.prize-cup.place-2 .prize-cup-fill {
+  fill: var(--prize-silver);
+}
+
+.chart-dot.prize.place-3,
+.prize-cup.place-3 .prize-cup-fill {
+  fill: var(--prize-bronze);
+}
+
+/* Очки от админа: кольцо, чтобы не путать с боем. */
+.chart-dot.grant,
+.chart-legend-grant {
+  fill: var(--surface);
+  stroke: var(--blue);
+  stroke-width: 2.5;
+}
+
+.prize-cup-handles {
+  fill: none;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.prize-cup.place-1 .prize-cup-handles {
+  stroke: var(--gold);
+}
+
+.prize-cup.place-2 .prize-cup-handles {
+  stroke: var(--prize-silver);
+}
+
+.prize-cup.place-3 .prize-cup-handles {
+  stroke: var(--prize-bronze);
+}
+
+.prize-cup-digit {
+  fill: #17191e;
+  font: 700 6.4px/1 var(--body);
+}
+
+.tone-prize-1 {
+  color: var(--gold);
+}
+
+.tone-prize-2 {
+  color: var(--prize-silver);
+}
+
+.tone-prize-3 {
+  color: var(--prize-bronze);
+}
+
+/* Причина очков от админа (её видят только админ и владелец) и название турнира: переносятся, не больше трёх строк. */
+.chart-tip-reason {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow-wrap: anywhere;
 }
 
 .chart-tip {

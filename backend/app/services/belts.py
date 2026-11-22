@@ -60,10 +60,10 @@ def award_manually(db: Session, actor: User, belt_id: int, player_id: int) -> Be
         raise conflict(f"Игрок {player.nickname} заблокирован, выдать пояс нельзя")
     if belt.current_champion_id == player.id:
         raise conflict(f"Пояс уже у игрока {player.nickname}")
-    if belt.kind == BeltKind.MAIN and db.scalar(
-        select(TitleFight.id).where(TitleFight.status == TitleFightStatus.SCHEDULED)
+    if db.scalar(
+        select(TitleFight.id).where(TitleFight.belt_id == belt.id, TitleFight.status == TitleFightStatus.SCHEDULED)
     ):
-        raise conflict("Назначен бой за основной пояс. Сначала завершите или отмените его")
+        raise conflict("Назначен бой за этот пояс. Сначала завершите или отмените его")
 
     db.add(
         BeltWin(

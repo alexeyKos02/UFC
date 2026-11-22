@@ -8,12 +8,14 @@ import PlayerChip from '../../components/PlayerChip.vue'
 import StateBlock from '../../components/StateBlock.vue'
 import { useAction, useLoad } from '../../feedback'
 import { formatDateTime, signed } from '../../format'
-import type { AdjustmentLogRow, AdminRating, SpecialPlaceLogRow, UpsetRow } from '../../types'
+import type { AdjustmentLogRow, AdminRating, PlayerBrief, PointGrantRow, SpecialPlaceLogRow, UpsetRow } from '../../types'
 
 const rating = useLoad(() => api.get<AdminRating>('/admin/rating'))
 const upsets = useLoad(() => api.get<UpsetRow[]>('/admin/rating/upsets'))
 const adjustmentLog = useLoad(() => api.get<AdjustmentLogRow[]>('/admin/rating/adjustment-log'))
 const placeLog = useLoad(() => api.get<SpecialPlaceLogRow[]>('/admin/rating/special-place-log'))
+const grants = useLoad(() => api.get<PointGrantRow[]>('/admin/rating/point-grants'))
+const playerOptions = useLoad(() => api.get<PlayerBrief[]>('/players/options'))
 const { busy, run } = useAction()
 
 const places = reactive<Record<number, number | ''>>({})
@@ -32,7 +34,7 @@ const blockedHolders = computed(() => {
 })
 
 async function refreshAll(): Promise<void> {
-  await Promise.all([rating.reload(), upsets.reload(), adjustmentLog.reload(), placeLog.reload()])
+  await Promise.all([rating.reload(), upsets.reload(), adjustmentLog.reload(), placeLog.reload(), grants.reload()])
 }
 
 async function setPlace(playerId: number): Promise<void> {
@@ -96,6 +98,33 @@ async function cancelAdjustment(): Promise<void> {
   }
 }
 
+const grantForm = reactive<{ playerId: number | ''; points: number | ''; reason: string }>({ playerId: '', points: '', reason: '' })
+const grantPlayer = computed(() => playerOptions.data.value?.find((player) => player.id === grantForm.playerId) ?? null)
+
+async function createGrant(): Promise<void> {
+  const body = { player_id: grantForm.playerId, points: grantForm.points, reason: grantForm.reason }
+  const done = await run(() => api.post('/admin/rating/point-grants', body), Number(grantForm.points) > 0 ? 'Очки начислены' : 'Очки сняты')
+  if (done) {
+    grantForm.playerId = ''
+    grantForm.points = ''
+    grantForm.reason = ''
+    await refreshAll()
+  }
+}
+
+const cancellingGrant = ref<PointGrantRow | null>(null)
+const grantCancelReason = ref('')
+
+async function cancelGrant(): Promise<void> {
+  const grant = cancellingGrant.value
+  if (!grant) return
+  if (await run(() => api.post(`/admin/rating/point-grants/${grant.id}/cancel`, { reason: grantCancelReason.value }), 'Начисление отменено')) {
+    cancellingGrant.value = null
+    grantCancelReason.value = ''
+    await refreshAll()
+  }
+}
+
 const actionLabel = { create: 'Создана', update: 'Изменена', cancel: 'Отменена' }
 const placeActionLabel = { set: 'Назначено', change: 'Изменено', clear: 'Снято' }
 </script>
@@ -142,6 +171,63 @@ const placeActionLabel = { set: 'Назначено', change: 'Изменено'
           <button class="btn sm danger" :disabled="busy" @click="clearPlace(item.player.id)">Снять</button>
         </div>
       </div>
+    </StateBlock>
+  </section>
+
+  <section class="section">
+    <h2>Начислить или снять очки</h2>
+    <form class="card stack" @submit.prevent="createGrant">
+      <p class="small muted">Очки лиги без боя: со знаком минус — снять. Игрок увидит на графике в профиле только изменение очков, причину видят админ и владелец. Отмена вернёт очки и пересчитает историю с даты начисления.</p>
+      <div class="field-grid">
+        <label class="field">
+          Игрок
+          <select v-model.number="grantForm.playerId" required>
+            <option value="" disabled>Выберите игрока</option>
+            <option v-for="player in playerOptions.data.value" :key="player.id" :value="player.id">{{ player.nickname }}</option>
+          </select>
+        </label>
+        <label class="field">
+          Очки
+          <input v-model.number="grantForm.points" type="number" step="1" min="-100000" max="100000" required placeholder="Например, 20 или -20" />
+        </label>
+      </div>
+      <label class="field">Причина<textarea v-model="grantForm.reason" required minlength="3" maxlength="500"></textarea></label>
+      <p v-if="grantPlayer && grantForm.points" class="small">
+        {{ grantPlayer.nickname }}:
+        <b :class="Number(grantForm.points) > 0 ? 'tone-plus' : 'tone-minus'">{{ signed(Number(grantForm.points)) }}</b>
+        {{ Number(grantForm.points) > 0 ? 'будет начислено' : 'будет снято' }}
+      </p>
+      <button class="btn primary" type="submit" :disabled="busy || !grantForm.points" style="align-self: flex-start">
+        {{ Number(grantForm.points) < 0 ? 'Снять очки' : 'Начислить очки' }}
+      </button>
+    </form>
+    <StateBlock :loading="grants.loading.value" :error="grants.error.value" skeleton="table">
+      <div v-if="grants.data.value?.length" class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Время</th><th>Игрок</th><th class="num">Очки</th><th>Причина</th><th>Автор</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in grants.data.value" :key="row.id" class="small" :class="{ 'tone-grey': row.status === 'cancelled' }">
+              <td>{{ formatDateTime(row.created_at) }}</td>
+              <td><PlayerChip :player="row.player" :size="24" /></td>
+              <td class="num">
+                <b :class="row.status === 'cancelled' ? '' : row.delta > 0 ? 'tone-plus' : 'tone-minus'">{{ signed(row.delta) }}</b>
+                <template v-if="row.points_before !== null && row.status === 'active'"><br /><span class="muted">{{ row.points_before }} → {{ row.points_after }}</span></template>
+              </td>
+              <td>
+                {{ row.reason }}
+                <template v-if="row.status === 'cancelled'"><br /><span class="muted">Отменено {{ row.cancelled_by?.nickname }}: {{ row.cancel_reason }}</span></template>
+              </td>
+              <td>{{ row.created_by.nickname }}</td>
+              <td>
+                <button v-if="row.status === 'active'" class="btn sm danger" type="button" @click="cancellingGrant = row">Отменить</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="empty">Ручных начислений ещё не было.</p>
     </StateBlock>
   </section>
 
@@ -242,6 +328,16 @@ const placeActionLabel = { set: 'Назначено', change: 'Изменено'
         <p>{{ editing.loser.nickname }}: автоматически {{ signed(-editing.auto_delta) }}, вручную {{ signed(preview.manualLoser) }}, итог по бою <b>{{ signed(preview.totalLoser) }}</b></p>
       </div>
       <button class="btn primary" type="submit" :disabled="busy || !form.points">Сохранить</button>
+    </form>
+  </Modal>
+
+  <Modal v-if="cancellingGrant" title="Отменить начисление" @close="cancellingGrant = null">
+    <p class="small muted">
+      {{ cancellingGrant.player.nickname }}: {{ signed(-cancellingGrant.delta) }}. Очки и места после даты начисления пересчитаются.
+    </p>
+    <form class="stack" @submit.prevent="cancelGrant">
+      <label class="field">Причина<textarea v-model="grantCancelReason" required minlength="3" maxlength="500"></textarea></label>
+      <button class="btn danger" type="submit" :disabled="busy">Отменить начисление</button>
     </form>
   </Modal>
 

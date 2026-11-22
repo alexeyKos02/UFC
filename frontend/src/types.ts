@@ -66,6 +66,8 @@ export interface BeltWin {
 
 export interface BeltDetail extends Belt {
   history: BeltWin[]
+  /** Назначенный бой за этот пояс без итога. */
+  open_title_fight: TitleFight | null
 }
 
 export interface ProfileBelt {
@@ -440,13 +442,18 @@ export interface SpecialPlaceLogRow {
 export type SkeletonKind = 'table' | 'league' | 'cards' | 'list' | 'profile' | 'fight' | 'form'
 
 /** Точка истории игрока: очки и номер в таблице после одного боя. */
+/** Что изменило очки игрока на графике: бой лиги, приз за место в турнире или очки от админа. */
+export type RatingHistoryEvent = 'fight' | 'prize' | 'grant'
+
 export interface RatingHistoryPoint {
-  fight_id: number
-  kind: FightKind
+  event: RatingHistoryEvent
+  /** Бой лиги; у приза — бой, завершивший турнир; у очков от админа — null. */
+  fight_id: number | null
+  kind?: FightKind
+  /** Дата боя; у очков от админа — дата начисления. */
   fought_at: string
-  confirmed_at: string
-  won: boolean
-  opponent: PlayerBrief
+  won?: boolean
+  opponent?: PlayerBrief
   delta: number
   points_before: number
   points_after: number
@@ -456,5 +463,26 @@ export interface RatingHistoryPoint {
   champion_before: boolean
   champion_after: boolean
   /** Титульный бой за основной пояс: по нему отмечаются защиты и неудачные попытки. */
-  main_title_fight: boolean
+  main_title_fight?: boolean
+  tournament?: { id: number; title: string }
+  /** Место в турнире: 1, 2 или 3. */
+  tournament_place?: 1 | 2 | 3
+  grant_id?: number
+  /** Причина очков от админа: видят только админ и владелец. */
+  reason?: string | null
+}
+
+export interface PointGrantRow {
+  id: number
+  player: PlayerBrief
+  delta: number
+  reason: string
+  status: 'active' | 'cancelled'
+  created_by: PlayerBrief
+  created_at: string
+  points_before: number | null
+  points_after: number | null
+  cancelled_by: PlayerBrief | null
+  cancelled_at: string | null
+  cancel_reason: string | null
 }

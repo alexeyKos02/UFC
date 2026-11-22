@@ -17,7 +17,10 @@ const { busy, run } = useAction()
 
 const mainBelt = computed(() => belts.data.value?.find((belt) => belt.kind === 'main') ?? null)
 const champion = computed(() => mainBelt.value?.champion ?? null)
-const hasOpenFight = computed(() => list.data.value?.some((item) => item.status === 'scheduled') ?? false)
+// Бои за турнирные пояса назначаются на странице пояса и сюда не мешают.
+const hasOpenFight = computed(
+  () => list.data.value?.some((item) => item.status === 'scheduled' && item.belt.id === mainBelt.value?.id) ?? false,
+)
 
 const player1 = ref<number | ''>('')
 const player2 = ref<number | ''>('')
@@ -56,6 +59,7 @@ async function cancel(): Promise<void> {
     <p v-if="hasOpenFight" class="small tone-amber">Незавершённый бой уже есть. Новый можно назначить после его завершения или отмены.</p>
     <p v-else-if="champion" class="small muted">Действующий чемпион: {{ champion.nickname }}. Выберите претендента.</p>
     <p v-else class="small muted">Пояс вакантен. Выберите двух активных игроков.</p>
+    <p class="small muted">Бой за любой пояс можно назначить и на странице этого пояса — там же админ вносит итог.</p>
     <form class="stack" @submit.prevent="schedule">
       <div class="field-grid">
         <label v-if="!champion" class="field">
@@ -85,7 +89,10 @@ async function cancel(): Promise<void> {
     <div v-if="list.data.value?.length" class="stack">
       <article v-for="item in list.data.value" :key="item.id" class="card stack">
         <div class="row between">
-          <span class="small muted">{{ item.scheduled_at ? formatDateTime(item.scheduled_at) : 'Дата не назначена' }}</span>
+          <span class="small muted">
+            <RouterLink class="link" :to="`/belts/${item.belt.id}`">{{ item.belt.name }}</RouterLink> ·
+            {{ item.scheduled_at ? formatDateTime(item.scheduled_at) : 'Дата не назначена' }}
+          </span>
           <StatusBadge :title="item.status" />
         </div>
         <div class="fight-row">

@@ -3,11 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { formatBoutDate, formatShortDate, plural, signed } from '../format'
 import type { RatingHistoryPoint } from '../types'
 import BeltMarkIcon from './BeltMarkIcon.vue'
-import { beltMark } from '../beltMarks'
+import PrizeCupIcon from './PrizeCupIcon.vue'
+import { beltMark, prizePlace } from '../beltMarks'
 
 /**
- * График очков или номера в таблице по боям игрока. По оси X — бои по порядку,
- * первая точка — значение до первого показанного боя. Наведение или касание показывает бой.
+ * График очков или номера в таблице по событиям игрока: бои лиги, призы за 1–3-е место
+ * турнира (кубок над точкой) и очки от админа (точка-кольцо). По оси X — события по порядку,
+ * первая точка — значение до первого показанного события. Наведение или касание показывает его.
  *
  * Масштаб: кнопки «+ / − / Весь график», на компьютере ещё Ctrl + колесо (и щипок на тачпаде),
  * на телефоне — двумя пальцами. Приближенный график сдвигается перетаскиванием по горизонтали.
@@ -220,6 +222,20 @@ const beltMarks = computed(() =>
   }),
 )
 
+/** Призы турниров: над точкой кубок с цифрой места. */
+const prizeMarks = computed(() =>
+  points.value.flatMap((point, index) => {
+    const place = point.item && inView(index) ? prizePlace(point.item) : null
+    return place ? [{ point, index, place }] : []
+  }),
+)
+
+function dotClass(item: RatingHistoryPoint): string {
+  if (item.event === 'prize') return `prize place-${item.tournament_place}`
+  if (item.event === 'grant') return 'grant'
+  return item.won ? 'win' : 'loss'
+}
+
 const markers = computed(() =>
   points.value.map((point, index) => ({ point, index })).filter(({ point, index }) => point.item && inView(index)),
 )
@@ -345,7 +361,8 @@ const summary = computed(() => {
   const list = points.value
   if (!list.length) return ''
   const name = props.mode === 'points' ? 'Очки' : 'Место в таблице'
-  return `${name}: было ${valueLabel(list[0])}, стало ${valueLabel(list[list.length - 1])}, боёв ${list.length - 1}`
+  const fights = props.history.filter((item) => item.event === 'fight').length
+  return `${name}: было ${valueLabel(list[0])}, стало ${valueLabel(list[list.length - 1])}, боёв ${fights}`
 })
 
 const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
@@ -357,7 +374,7 @@ const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
       <button type="button" class="btn sm" :disabled="span <= minSpan + 0.01" aria-label="Приблизить" @click="zoomIn">+</button>
       <button type="button" class="btn sm" :disabled="!zoomed" aria-label="Отдалить" @click="zoomOut">−</button>
       <button type="button" class="btn sm" :disabled="!zoomed" @click="resetView">Весь график</button>
-      <span v-if="zoomed" class="small muted">Боёв на экране: {{ Math.round(span) }} из {{ lastIndex }}</span>
+      <span v-if="zoomed" class="small muted">Точек на экране: {{ Math.round(span) }} из {{ lastIndex }}</span>
     </div>
     <div ref="box" class="rating-chart" :class="{ zoomed }">
       <svg
@@ -423,23 +440,49 @@ const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
           :mark="item.mark"
           :transform="`translate(${x(item.index) - 8}, ${Math.max(y(item.point.value) - 22, 0)})`"
         />
+        <PrizeCupIcon
+          v-for="item in prizeMarks"
+          :key="`prize-${item.index}`"
+          :place="item.place"
+          :transform="`translate(${x(item.index) - 8}, ${Math.max(y(item.point.value) - 22, 0)})`"
+        />
         <circle
           v-for="{ point, index } in markers"
           v-show="showMarkers || index === active"
           :key="index"
           class="chart-dot"
-          :class="point.item!.won ? 'win' : 'loss'"
+          :class="dotClass(point.item!)"
           :cx="x(index)"
           :cy="y(point.value)"
           :r="index === active ? 6 : 4"
         />
       </svg>
       <div v-if="tooltip" class="chart-tip" :class="{ below: tooltip.below }" :style="{ left: `${tooltip.left}px`, top: `${tooltip.top}px` }">
-        <template v-if="tooltip.point.item">
+        <template v-if="tooltip.point.item?.event === 'prize'">
+          <span class="small muted">{{ formatBoutDate(tooltip.point.item.fought_at) }}</span>
+          <span>
+            <b :class="`tone-prize-${tooltip.point.item.tournament_place}`">{{ tooltip.point.item.tournament_place }}-е место</b>
+            в турнире
+          </span>
+          <span class="chart-tip-reason">«{{ tooltip.point.item.tournament?.title }}»</span>
+          <span>{{ valueLabel(tooltip.point) }}<template v-if="mode === 'points'"> ({{ signed(tooltip.point.item.delta) }})</template></span>
+          <span v-if="tooltip.point.champion" class="tone-gold">С поясом чемпиона</span>
+        </template>
+        <template v-else-if="tooltip.point.item?.event === 'grant'">
+          <span class="small muted">{{ formatBoutDate(tooltip.point.item.fought_at) }}</span>
+          <span>
+            <b :class="tooltip.point.item.delta > 0 ? 'tone-plus' : 'tone-minus'">{{ signed(tooltip.point.item.delta) }}</b>
+            {{ tooltip.point.item.delta > 0 ? 'начислено' : 'снято' }} администрацией
+          </span>
+          <span v-if="tooltip.point.item.reason" class="small muted chart-tip-reason">{{ tooltip.point.item.reason }}</span>
+          <span>{{ valueLabel(tooltip.point) }}</span>
+          <span v-if="tooltip.point.champion" class="tone-gold">С поясом чемпиона</span>
+        </template>
+        <template v-else-if="tooltip.point.item">
           <span class="small muted">{{ formatBoutDate(tooltip.point.item.fought_at) }}</span>
           <span class="chart-tip-rival">
             <b :class="tooltip.point.item.won ? 'tone-plus' : 'tone-minus'">{{ tooltip.point.item.won ? 'Победа' : 'Поражение' }}</b>
-            {{ tooltip.point.item.won ? 'над' : 'от' }} {{ tooltip.point.item.opponent.nickname }}
+            {{ tooltip.point.item.won ? 'над' : 'от' }} {{ tooltip.point.item.opponent?.nickname }}
           </span>
           <span>{{ valueLabel(tooltip.point) }}<template v-if="mode === 'points'"> ({{ signed(tooltip.point.item.delta) }})</template></span>
           <span v-if="tooltipMark === 'take'" class="tone-gold">Завоевал пояс чемпиона</span>
@@ -449,7 +492,7 @@ const clipId = `chart-clip-${Math.random().toString(36).slice(2, 8)}`
           <span v-else-if="tooltip.point.champion" class="tone-gold">С поясом чемпиона</span>
         </template>
         <template v-else>
-          <span class="small muted">До первого боя</span>
+          <span class="small muted">В начале</span>
           <span>{{ valueLabel(tooltip.point) }}</span>
         </template>
       </div>

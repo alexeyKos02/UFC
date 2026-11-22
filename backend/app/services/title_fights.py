@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 
 from app.db import utcnow
 from app.errors import bad_request, conflict, forbidden, not_found
-from app.models import BeltWin, Fight, FightKind, FightStatus, TitleFight, TitleFightStatus, User, UserStatus
+from app.models import Belt, BeltWin, Fight, FightKind, FightStatus, TitleFight, TitleFightStatus, User, UserStatus
 from app.schemas import FightResultIn, TitleFightIn
 from app.services import belts
 from app.services.fight_records import create_fight_record
 from app.services.rating import acquire_rating_lock
 
-ALREADY_SCHEDULED = "Бой за основной пояс уже назначен. Сначала завершите или отмените его"
+ALREADY_SCHEDULED = "Бой за этот пояс уже назначен. Сначала завершите или отмените его"
 
 
 def _lock(db: Session, title_fight_id: int) -> TitleFight:
@@ -25,10 +25,24 @@ def _lock(db: Session, title_fight_id: int) -> TitleFight:
     return title_fight
 
 
+def _belt_for(db: Session, belt_id: int | None) -> Belt:
+    if belt_id is None:
+        return belts.main_belt(db, lock=True)
+    belt = db.scalar(
+        select(Belt).where(Belt.id == belt_id).with_for_update().execution_options(populate_existing=True)
+    )
+    if belt is None:
+        raise not_found("Пояс не найден")
+    return belt
+
+
 def schedule(db: Session, actor: User, data: TitleFightIn) -> TitleFight:
+    """Бой за пояс (основной или турнирный): чемпион против претендента, у вакантного — два игрока."""
     acquire_rating_lock(db)
-    belt = belts.main_belt(db, lock=True)
-    if db.scalar(select(TitleFight.id).where(TitleFight.status == TitleFightStatus.SCHEDULED)):
+    belt = _belt_for(db, data.belt_id)
+    if db.scalar(
+        select(TitleFight.id).where(TitleFight.belt_id == belt.id, TitleFight.status == TitleFightStatus.SCHEDULED)
+    ):
         raise conflict(ALREADY_SCHEDULED)
 
     champion_id = belt.current_champion_id

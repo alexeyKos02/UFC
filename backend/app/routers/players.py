@@ -5,7 +5,20 @@ from sqlalchemy.orm import aliased
 from app.db import utcnow
 from app.deps import CurrentUser, Db
 from app.errors import not_found
-from app.models import Belt, BeltKind, Fight, FightStatus, RatingChange, TitleFight, User, UserStatus
+from app.models import (
+    AdjustmentStatus,
+    Belt,
+    BeltKind,
+    Fight,
+    FightStatus,
+    PointGrant,
+    RatingChange,
+    TitleFight,
+    Tournament,
+    TournamentPrizeChange,
+    User,
+    UserStatus,
+)
 from app.schemas import ProfileIn
 from app.serializers import (
     account_out,
@@ -86,8 +99,13 @@ def player_fights(player_id: int, viewer: CurrentUser, db: Db) -> list[dict]:
 
 
 @router.get("/players/{player_id}/rating-history")
-def rating_history(player_id: int, _: CurrentUser, db: Db) -> dict:
-    """Очки и номер в таблице после каждого боя игрока, по дате боя — для графиков в профиле."""
+def rating_history(player_id: int, viewer: CurrentUser, db: Db) -> dict:
+    """Очки и номер в таблице после каждого события игрока — для графиков в профиле.
+
+    События: бой лиги (по дате боя), приз за 1–3-е место турнира (по дате боя, завершившего
+    турнир) и очки, которые начислил или снял админ (по дате начисления; причину видят только
+    админ и владелец).
+    """
     if db.get(User, player_id) is None:
         raise not_found("Игрок не найден")
     opponent = aliased(User)
@@ -103,28 +121,78 @@ def rating_history(player_id: int, _: CurrentUser, db: Db) -> dict:
             opponent.id == case((Fight.player1_id == RatingChange.player_id, Fight.player2_id), else_=Fight.player1_id),
         )
         .where(RatingChange.player_id == player_id, Fight.status == FightStatus.CONFIRMED)
-        .order_by(Fight.fought_at, Fight.id)
     ).all()
-    points = [
-        {
-            "fight_id": fight.id,
-            "kind": fight.kind.value,
-            "fought_at": fight.fought_at,
-            "confirmed_at": fight.confirmed_at,
-            "won": fight.winner_id == player_id,
-            "opponent": player_brief(rival),
-            "delta": change.delta,
-            "points_before": change.points_before,
-            "points_after": change.points_after,
-            "table_place_before": change.table_place_before,
-            "table_place_after": change.table_place_after,
-            "champion_before": change.champion_before,
-            "champion_after": change.champion_after,
-            "main_title_fight": belt_kind == BeltKind.MAIN,
+
+    def snapshot(row) -> dict:
+        return {
+            "delta": row.delta,
+            "points_before": row.points_before,
+            "points_after": row.points_after,
+            "table_place_before": row.table_place_before,
+            "table_place_after": row.table_place_after,
+            "champion_before": row.champion_before,
+            "champion_after": row.champion_after,
         }
-        for change, fight, rival, belt_kind in rows
-    ]
-    return {"points": points}
+
+    events: list[tuple[tuple, dict]] = []
+    for change, fight, rival, belt_kind in rows:
+        events.append(
+            (
+                (fight.fought_at, fight.id, 0),
+                {
+                    "event": "fight",
+                    "fight_id": fight.id,
+                    "kind": fight.kind.value,
+                    "fought_at": fight.fought_at,
+                    "won": fight.winner_id == player_id,
+                    "opponent": player_brief(rival),
+                    "main_title_fight": belt_kind == BeltKind.MAIN,
+                    **snapshot(change),
+                },
+            )
+        )
+    prizes = db.execute(
+        select(TournamentPrizeChange, Fight, Tournament)
+        .join(Fight, Fight.id == TournamentPrizeChange.fight_id)
+        .join(Tournament, Tournament.id == TournamentPrizeChange.tournament_id)
+        .where(TournamentPrizeChange.player_id == player_id, Fight.status == FightStatus.CONFIRMED)
+    ).all()
+    for prize, fight, tournament in prizes:
+        events.append(
+            (
+                (fight.fought_at, fight.id, 1),
+                {
+                    "event": "prize",
+                    "fight_id": fight.id,
+                    "fought_at": fight.fought_at,
+                    "tournament": {"id": tournament.id, "title": tournament.title},
+                    "tournament_place": prize.place,
+                    **snapshot(prize),
+                },
+            )
+        )
+    grants = db.scalars(
+        select(PointGrant).where(
+            PointGrant.player_id == player_id,
+            PointGrant.status == AdjustmentStatus.ACTIVE,
+            PointGrant.points_before.is_not(None),
+        )
+    ).all()
+    for grant in grants:
+        events.append(
+            (
+                (grant.created_at, 0, 2),
+                {
+                    "event": "grant",
+                    "grant_id": grant.id,
+                    "fought_at": grant.created_at,
+                    "reason": grant.reason if viewer.is_staff else None,
+                    **snapshot(grant),
+                },
+            )
+        )
+    events.sort(key=lambda item: item[0])
+    return {"points": [item for _, item in events]}
 
 
 @router.patch("/me/profile")
